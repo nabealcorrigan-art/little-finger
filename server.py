@@ -26,15 +26,28 @@ monitor_thread = None
 def load_config():
     """Load configuration from JSON file"""
     try:
-        with open('config.json', 'r') as f:
+        # Use utf-8-sig encoding to handle UTF-8 BOM if present
+        with open('config.json', 'r', encoding='utf-8-sig') as f:
             return json.load(f)
     except FileNotFoundError:
         logger.error("config.json not found")
         return None
     except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in config.json: {e.msg} at line {e.lineno}, column {e.colno}")
+        # Defensive attribute access in case exception object is malformed
+        try:
+            msg = getattr(e, 'msg', 'Unknown JSON error')
+            lineno = getattr(e, 'lineno', '?')
+            colno = getattr(e, 'colno', '?')
+            logger.error(f"Invalid JSON in config.json: {msg} at line {lineno}, column {colno}")
+        except Exception:
+            # Fallback if accessing attributes fails
+            logger.error(f"Invalid JSON in config.json: {str(e)}")
         logger.error("Please check your config.json file for syntax errors (trailing commas, missing brackets, etc.)")
         logger.error("You can validate your JSON at https://jsonlint.com/")
+        return None
+    except Exception as e:
+        # Catch any other unexpected errors
+        logger.error(f"Unexpected error loading config.json: {type(e).__name__}: {e}")
         return None
 
 
