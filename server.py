@@ -31,6 +31,11 @@ def load_config():
     except FileNotFoundError:
         logger.error("config.json not found")
         return None
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in config.json: {e.msg} at line {e.lineno}, column {e.colno}")
+        logger.error("Please check your config.json file for syntax errors (trailing commas, missing brackets, etc.)")
+        logger.error("You can validate your JSON at https://jsonlint.com/")
+        return None
 
 
 def on_new_match(match):
