@@ -1,0 +1,38 @@
+{
+  "ring": {
+    "username": "your-email@example.com",
+    "password": "your-password",
+    "refresh_token": "",
+    "_comment": "After first login, refresh_token will be saved automatically"
+  },
+  "monitoring": {
+    "poll_interval_seconds": 60,
+    "_comment_interval": "How often to check for new posts (in seconds)",
+    "keywords": [
+      "suspicious",
+      "theft",
+      "break-in",
+      "burglar",
+      "police",
+      "vandalism",
+      "car prowl",
+      "package theft",
+      "trespassing",
+      "assault"
+    ],
+    "emojis": [
+      "🚨",
+      "🚔",
+      "⚠️",
+      "🔴",
+      "🚓",
+      "👮",
+      "🏃"
+    ]
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 5000,
+    "_comment_host": "Use 0.0.0.0 to allow external access, 127.0.0.1 for localhost only"
+  }
+}
