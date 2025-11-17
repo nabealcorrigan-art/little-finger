@@ -58,7 +58,7 @@ pip install -r requirements.txt
   },
   "server": {
     "host": "0.0.0.0",
-    "port": 5000
+    "port": 5777
   }
 }
 ```
@@ -104,16 +104,16 @@ docker-compose up -d
 3. Or build and run manually:
 ```bash
 docker build -t little-finger .
-docker run -p 5000:5000 -v $(pwd)/config.local.json:/app/config.json little-finger
+docker run -p 5777:5777 -v $(pwd)/config.local.json:/app/config.json little-finger
 ```
 
-The server will start on `http://0.0.0.0:5000` by default.
+The server will start on `http://0.0.0.0:5777` by default.
 
 ### Accessing the Dashboard
 
 Open your browser and navigate to:
-- `http://localhost:5000` (if running locally)
-- `http://YOUR_SERVER_IP:5000` (if running on a remote server)
+- `http://localhost:5777` (if running locally)
+- `http://YOUR_SERVER_IP:5777` (if running on a remote server)
 
 ### Configuration Options
 

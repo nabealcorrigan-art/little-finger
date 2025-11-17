@@ -5,7 +5,7 @@ services:
     build: .
     container_name: little-finger-monitor
     ports:
-      - "5000:5000"
+      - "5777:5777"
     volumes:
       - ./config.local.json:/app/config.json
     restart: unless-stopped
