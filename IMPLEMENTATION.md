@@ -160,7 +160,7 @@ nohup python server.py > app.log 2>&1 &
 
 ### Server Settings
 - Host: 0.0.0.0 (network accessible)
-- Port: 5000 (configurable)
+- Port: 5777 (configurable)
 - WebSocket enabled
 
 ## Performance

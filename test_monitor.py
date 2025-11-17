@@ -24,7 +24,7 @@ def create_mock_config():
         },
         "server": {
             "host": "127.0.0.1",
-            "port": 5000
+            "port": 5777
         }
     }
 

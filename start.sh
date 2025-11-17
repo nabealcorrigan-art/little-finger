@@ -37,7 +37,7 @@ fi
 
 echo ""
 echo "🚀 Starting Little Finger Monitor..."
-echo "   Access dashboard at: http://localhost:5000"
+echo "   Access dashboard at: http://localhost:5777"
 echo "   Press Ctrl+C to stop"
 echo ""
 
