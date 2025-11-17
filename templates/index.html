@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Little Finger - Ring Neighborhood Monitor</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .container {
+            display: flex;
+            height: calc(100vh - 100px);
+        }
+        
+        .sidebar {
+            width: 350px;
+            background: #2a2a2a;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #444;
+        }
+        
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .stats-card {
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .stats-card h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #444;
+        }
+        
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-label {
+            color: #aaa;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            color: #fff;
+        }
+        
+        .filter-section {
+            margin-bottom: 20px;
+        }
+        
+        .filter-section h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+        
+        .filter-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .filter-tag {
+            background: #444;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        
+        .filter-tag:hover {
+            background: #555;
+        }
+        
+        .filter-tag.active {
+            background: #667eea;
+            border-color: #764ba2;
+        }
+        
+        .matches-list {
+            margin-top: 20px;
+        }
+        
+        .matches-list h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+        
+        .match-item {
+            background: #333;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border-left: 3px solid #667eea;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .match-item.new {
+            border-left-color: #ff6b6b;
+            animation: pulse 0.5s ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                background: #333;
+            }
+            50% {
+                background: #444;
+            }
+        }
+        
+        .match-time {
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        
+        .match-content {
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+        
+        .match-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 8px;
+        }
+        
+        .match-tag {
+            background: #667eea;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.connected {
+            background: #4caf50;
+            box-shadow: 0 0 10px #4caf50;
+        }
+        
+        .status-indicator.disconnected {
+            background: #f44336;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
+        
+        .no-matches {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🕵️ Little Finger - Ring Neighborhood Monitor</h1>
+        <div class="subtitle">Real-time monitoring and heat map visualization of Ring neighborhood posts</div>
+    </div>
+    
+    <div class="container">
+        <div class="sidebar">
+            <div class="connection-status">
+                <span class="status-indicator disconnected" id="statusIndicator"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+            
+            <div class="stats-card">
+                <h3>📊 Statistics</h3>
+                <div class="stat-item">
+                    <span class="stat-label">Total Matches:</span>
+                    <span class="stat-value" id="totalMatches">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Monitoring:</span>
+                    <span class="stat-value" id="monitoringCount">0 terms</span>
+                </div>
+            </div>
+            
+            <div class="filter-section">
+                <h3>🔍 Filter by Term</h3>
+                <div class="filter-tags" id="filterTags">
+                    <div class="filter-tag active" data-term="all">All</div>
+                </div>
+            </div>
+            
+            <div class="matches-list">
+                <h3>📍 Recent Matches</h3>
+                <div id="matchesList">
+                    <div class="no-matches">Waiting for matches...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([37.7749, -122.4194], 10); // Default to San Francisco
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18
+        }).addTo(map);
+        
+        // Store matches
+        let allMatches = [];
+        let currentFilter = 'all';
+        let heatLayer = null;
+        let markers = [];
+        
+        // Initialize SocketIO
+        const socket = io();
+        
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            document.getElementById('statusIndicator').classList.remove('disconnected');
+            document.getElementById('statusIndicator').classList.add('connected');
+            document.getElementById('statusText').textContent = 'Connected';
+            loadInitialData();
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            document.getElementById('statusIndicator').classList.remove('connected');
+            document.getElementById('statusIndicator').classList.add('disconnected');
+            document.getElementById('statusText').textContent = 'Disconnected';
+        });
+        
+        socket.on('new_match', (match) => {
+            console.log('New match received:', match);
+            allMatches.unshift(match);
+            updateMap();
+            updateMatchesList();
+            updateStats();
+        });
+        
+        // Load initial data
+        async function loadInitialData() {
+            try {
+                // Load existing matches
+                const matchesResponse = await fetch('/api/matches');
+                allMatches = await matchesResponse.json();
+                
+                // Load configuration
+                const configResponse = await fetch('/api/config');
+                const config = await configResponse.json();
+                
+                // Load stats
+                const statsResponse = await fetch('/api/stats');
+                const stats = await statsResponse.json();
+                
+                // Update UI
+                updateFilterTags(config.keywords, config.emojis);
+                updateMap();
+                updateMatchesList();
+                updateStats();
+                
+            } catch (error) {
+                console.error('Error loading initial data:', error);
+            }
+        }
+        
+        function updateFilterTags(keywords, emojis) {
+            const filterTags = document.getElementById('filterTags');
+            const allTag = filterTags.querySelector('[data-term="all"]');
+            
+            // Add keyword tags
+            keywords.forEach(kw => {
+                const tag = document.createElement('div');
+                tag.className = 'filter-tag';
+                tag.setAttribute('data-term', kw);
+                tag.textContent = kw;
+                tag.onclick = () => filterByTerm(kw);
+                filterTags.appendChild(tag);
+            });
+            
+            // Add emoji tags
+            emojis.forEach(emoji => {
+                const tag = document.createElement('div');
+                tag.className = 'filter-tag';
+                tag.setAttribute('data-term', emoji);
+                tag.textContent = emoji;
+                tag.onclick = () => filterByTerm(emoji);
+                filterTags.appendChild(tag);
+            });
+        }
+        
+        function filterByTerm(term) {
+            currentFilter = term;
+            
+            // Update active tag
+            document.querySelectorAll('.filter-tag').forEach(tag => {
+                tag.classList.remove('active');
+                if (tag.getAttribute('data-term') === term) {
+                    tag.classList.add('active');
+                }
+            });
+            
+            updateMap();
+            updateMatchesList();
+        }
+        
+        function getFilteredMatches() {
+            if (currentFilter === 'all') {
+                return allMatches;
+            }
+            
+            return allMatches.filter(match => {
+                const matchedTerms = [...match.matched_keywords, ...match.matched_emojis];
+                return matchedTerms.some(term => term.toLowerCase() === currentFilter.toLowerCase() || term === currentFilter);
+            });
+        }
+        
+        function updateMap() {
+            // Clear existing markers
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            
+            // Remove existing heat layer
+            if (heatLayer) {
+                map.removeLayer(heatLayer);
+            }
+            
+            const filteredMatches = getFilteredMatches();
+            
+            if (filteredMatches.length === 0) {
+                return;
+            }
+            
+            // Create heat map data
+            const heatData = filteredMatches
+                .filter(match => match.location.latitude && match.location.longitude)
+                .map(match => [match.location.latitude, match.location.longitude, 0.8]);
+            
+            if (heatData.length > 0) {
+                heatLayer = L.heatLayer(heatData, {
+                    radius: 25,
+                    blur: 15,
+                    maxZoom: 13,
+                    gradient: {
+                        0.0: 'blue',
+                        0.5: 'lime',
+                        0.7: 'yellow',
+                        0.9: 'orange',
+                        1.0: 'red'
+                    }
+                }).addTo(map);
+                
+                // Add markers
+                filteredMatches.forEach(match => {
+                    if (match.location.latitude && match.location.longitude) {
+                        const marker = L.circleMarker([match.location.latitude, match.location.longitude], {
+                            radius: 8,
+                            fillColor: '#ff6b6b',
+                            color: '#fff',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        }).addTo(map);
+                        
+                        const popupContent = `
+                            <strong>${match.title || 'Match'}</strong><br>
+                            ${new Date(match.timestamp).toLocaleString()}<br>
+                            <em>Terms: ${[...match.matched_keywords, ...match.matched_emojis].join(', ')}</em>
+                        `;
+                        marker.bindPopup(popupContent);
+                        markers.push(marker);
+                    }
+                });
+                
+                // Fit map to show all markers
+                if (markers.length > 0) {
+                    const group = L.featureGroup(markers);
+                    map.fitBounds(group.getBounds().pad(0.1));
+                }
+            }
+        }
+        
+        function updateMatchesList() {
+            const matchesList = document.getElementById('matchesList');
+            const filteredMatches = getFilteredMatches();
+            
+            if (filteredMatches.length === 0) {
+                matchesList.innerHTML = '<div class="no-matches">No matches found</div>';
+                return;
+            }
+            
+            matchesList.innerHTML = filteredMatches.slice(0, 20).map(match => {
+                const time = new Date(match.timestamp).toLocaleString();
+                const tags = [...match.matched_keywords, ...match.matched_emojis]
+                    .map(term => `<span class="match-tag">${term}</span>`)
+                    .join('');
+                
+                return `
+                    <div class="match-item">
+                        <div class="match-time">${time}</div>
+                        <div class="match-content">
+                            <strong>${match.title || 'Untitled'}</strong><br>
+                            ${match.text ? match.text.substring(0, 100) + '...' : ''}
+                        </div>
+                        <div class="match-tags">${tags}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateStats() {
+            document.getElementById('totalMatches').textContent = allMatches.length;
+            
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(stats => {
+                    const totalTerms = (stats.configured_keywords?.length || 0) + (stats.configured_emojis?.length || 0);
+                    document.getElementById('monitoringCount').textContent = `${totalTerms} terms`;
+                })
+                .catch(error => console.error('Error updating stats:', error));
+        }
+        
+        // Filter by 'all' on page load
+        document.querySelector('[data-term="all"]').onclick = () => filterByTerm('all');
+    </script>
+</body>
+</html>

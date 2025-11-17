@@ -1,2 +1,185 @@
-# little-finger
-little finger
+# Little Finger 🕵️
+
+A headless monitoring application for Ring Neighborhood that tracks specified keywords and emojis in neighborhood posts, then visualizes matches on a real-time heat map.
+
+## Features
+
+- 🔍 **Keyword & Emoji Monitoring**: Track specific words and emojis in Ring neighborhood posts
+- 🗺️ **Live Heat Map**: Real-time visualization of matched posts with geographical intensity
+- ⚡ **Real-Time Updates**: WebSocket-based streaming of new matches to the dashboard
+- 🎯 **Filtering**: Filter heat map and matches by specific terms
+- ⏰ **Precise Timestamps**: Each match includes exact detection time and post time
+- 📍 **Location Tracking**: Captures and displays the geographical location of each match
+- 📊 **Statistics Dashboard**: View match counts and monitoring statistics
+
+## Architecture
+
+The application consists of three main components:
+
+1. **Ring Monitor** (`ring_monitor.py`): Polls Ring API for neighborhood posts and detects matches
+2. **Web Server** (`server.py`): Flask-based REST API and WebSocket server
+3. **Dashboard** (`templates/index.html`): Interactive heat map visualization with Leaflet.js
+
+## Installation
+
+### Prerequisites
+
+- Python 3.8 or higher
+- Ring account credentials
+- pip package manager
+
+### Setup
+
+1. Clone the repository:
+```bash
+git clone https://github.com/nabealcorrigan-art/little-finger.git
+cd little-finger
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Configure the application by editing `config.json`:
+```json
+{
+  "ring": {
+    "username": "your-ring-email@example.com",
+    "password": "your-ring-password",
+    "refresh_token": ""
+  },
+  "monitoring": {
+    "poll_interval_seconds": 60,
+    "keywords": ["suspicious", "theft", "break-in", "burglar", "police"],
+    "emojis": ["🚨", "🚔", "⚠️", "🔴"]
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 5000
+  }
+}
+```
+
+**Important**: Create a copy as `config.local.json` for your personal credentials (this file is ignored by git).
+
+## Usage
+
+### Starting the Server
+
+Run the application:
+```bash
+python server.py
+```
+
+The server will start on `http://0.0.0.0:5000` by default.
+
+### Accessing the Dashboard
+
+Open your browser and navigate to:
+- `http://localhost:5000` (if running locally)
+- `http://YOUR_SERVER_IP:5000` (if running on a remote server)
+
+### Configuration Options
+
+- **poll_interval_seconds**: How often to check for new posts (default: 60 seconds)
+- **keywords**: List of case-insensitive keywords to monitor
+- **emojis**: List of emojis to detect in posts
+- **host**: Server bind address (use "0.0.0.0" to allow external access)
+- **port**: Server port number
+
+## API Endpoints
+
+- `GET /`: Dashboard interface
+- `GET /api/matches`: Get all detected matches
+- `GET /api/matches/filter?term=<term>`: Filter matches by keyword or emoji
+- `GET /api/stats`: Get monitoring statistics
+- `GET /api/config`: Get current monitoring configuration
+- WebSocket `/`: Real-time match updates
+
+## Dashboard Features
+
+### Heat Map
+- **Intensity Colors**: Blue (low) → Green → Yellow → Orange → Red (high)
+- **Markers**: Click on red circle markers to see match details
+- **Auto-Zoom**: Map automatically adjusts to show all matches
+
+### Filtering
+- Click on any keyword or emoji tag to filter the view
+- Click "All" to show all matches
+- Filters apply to both the heat map and the matches list
+
+### Statistics
+- Total match count
+- Number of monitored terms
+- Real-time connection status indicator
+
+## Development
+
+### Project Structure
+```
+little-finger/
+├── ring_monitor.py      # Ring API monitoring logic
+├── server.py            # Flask web server and API
+├── templates/
+│   └── index.html       # Dashboard interface
+├── config.json          # Configuration template
+├── requirements.txt     # Python dependencies
+└── README.md           # This file
+```
+
+### Adding Mock Data for Testing
+
+When Ring API is unavailable or for testing, the monitor runs in mock mode. You can modify `_get_mock_posts()` in `ring_monitor.py` to return sample data.
+
+## Security Considerations
+
+- Never commit your `config.local.json` with real credentials
+- Use HTTPS when exposing the server over the internet
+- Consider implementing authentication for the dashboard
+- Refresh tokens are automatically saved when received from Ring API
+- Keep your Ring credentials secure
+
+## Headless Operation
+
+The application is designed to run headless (without a GUI) on servers like Kali Linux:
+
+```bash
+# Run in background with nohup
+nohup python server.py > app.log 2>&1 &
+
+# Or use screen
+screen -S little-finger
+python server.py
+# Press Ctrl+A then D to detach
+```
+
+## Troubleshooting
+
+### Authentication Issues
+- Verify your Ring credentials are correct
+- Check if 2FA is enabled (you may need to generate an app-specific password)
+- Look for refresh_token in the logs after first successful authentication
+
+### No Matches Appearing
+- Verify keywords/emojis are configured correctly
+- Check the poll interval isn't too long
+- Ensure Ring neighborhood posts are available in your area
+- Check logs for any API errors
+
+### Map Not Loading
+- Ensure internet connection for loading Leaflet.js CDN resources
+- Check browser console for JavaScript errors
+- Verify WebSocket connection is established (green indicator)
+
+## License
+
+MIT License - See LICENSE file for details
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Disclaimer
+
+This application is for educational and security awareness purposes. Always respect privacy and local laws when monitoring public information. Ring and related trademarks are property of their respective owners.
