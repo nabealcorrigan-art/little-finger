@@ -2,6 +2,8 @@
 
 A headless monitoring application for Ring Neighborhood that tracks specified keywords and emojis in neighborhood posts, then visualizes matches on a real-time heat map.
 
+> **⚠️ Important Note**: This application uses the unofficial `ring-doorbell` Python library to connect to Ring's API. Ring does not provide official public API access to neighborhood posts. The availability and functionality of neighborhood data access depends on Ring's current API implementation and your account type. See [RING_API_DETAILS.md](RING_API_DETAILS.md) for technical details and alternatives.
+
 ## Features
 
 - 🔍 **Keyword & Emoji Monitoring**: Track specific words and emojis in Ring neighborhood posts
@@ -163,7 +165,16 @@ little-finger/
 
 ### Adding Mock Data for Testing
 
-When Ring API is unavailable or for testing, the monitor runs in mock mode. You can modify `_get_mock_posts()` in `ring_monitor.py` to return sample data.
+The application includes robust testing capabilities:
+
+1. **Automatic Mock Mode**: When Ring API is unavailable, the system runs in mock mode
+2. **Demo Data Generator**: Use `generate_demo_data.py` to create realistic test data:
+   ```bash
+   python generate_demo_data.py
+   ```
+3. **Manual Mock Data**: Modify `_get_mock_posts()` in `ring_monitor.py` to customize test posts
+
+**Note**: Mock mode is perfect for development, testing the heat map visualization, and demonstrating the system without Ring API access.
 
 ## Security Considerations
 
@@ -188,6 +199,12 @@ python server.py
 ```
 
 ## Troubleshooting
+
+### Ring API Connection
+- **Neighborhood Access**: The `ring-doorbell` library may not support neighborhood posts for all accounts
+- **API Limitations**: Ring's unofficial API can change without notice
+- **Testing**: Use mock mode and demo data generator for development
+- **See**: [RING_API_DETAILS.md](RING_API_DETAILS.md) for detailed information about Ring API access
 
 ### Authentication Issues
 - Verify your Ring credentials are correct
