@@ -65,11 +65,44 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Starting the Server
+### Quick Start with Shell Script
 
-Run the application:
+The easiest way to start:
+```bash
+./start.sh
+```
+
+This will:
+- Create a virtual environment if needed
+- Install dependencies
+- Start the server
+
+### Manual Start
+
+Run the application directly:
 ```bash
 python server.py
+```
+
+### Docker Deployment
+
+For containerized deployment:
+
+1. Copy your config file:
+```bash
+cp config.example.json config.local.json
+# Edit config.local.json with your credentials
+```
+
+2. Start with Docker Compose:
+```bash
+docker-compose up -d
+```
+
+3. Or build and run manually:
+```bash
+docker build -t little-finger .
+docker run -p 5000:5000 -v $(pwd)/config.local.json:/app/config.json little-finger
 ```
 
 The server will start on `http://0.0.0.0:5000` by default.
