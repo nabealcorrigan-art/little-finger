@@ -6,8 +6,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install playwright browsers and system dependencies
+RUN playwright install --with-deps chromium
+
 # Copy application files
 COPY ring_monitor.py .
+COPY ring_browser_auth.py .
 COPY server.py .
 COPY templates/ templates/
 

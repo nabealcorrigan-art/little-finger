@@ -35,6 +35,13 @@ if ! python3 -c "import flask" 2>/dev/null; then
     pip install -r requirements.txt
 fi
 
+# Install playwright browsers if needed
+if ! ls ~/.cache/ms-playwright/chromium-* >/dev/null 2>&1; then
+    echo "📦 Installing playwright browsers..."
+    playwright install chromium
+    playwright install-deps chromium
+fi
+
 echo ""
 echo "🚀 Starting Little Finger Monitor..."
 echo "   Access dashboard at: http://localhost:5777"
