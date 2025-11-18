@@ -4,23 +4,26 @@ Serves real-time heat map of detected Ring neighborhood posts
 """
 import json
 import logging
-from flask import Flask, render_template, jsonify, request
+import secrets
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
-from threading import Thread
+from threading import Thread, Lock
 from ring_monitor import RingMonitor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'little-finger-secret-key'
+app.config['SECRET_KEY'] = secrets.token_hex(32)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global monitor instance
 monitor = None
 monitor_thread = None
+auth_lock = Lock()
+pending_credentials = None
 
 
 def load_config():
@@ -64,9 +67,128 @@ def start_monitoring_thread():
         monitor.start_monitoring(callback=on_new_match)
 
 
+def is_authenticated():
+    """Check if user is authenticated"""
+    return session.get('authenticated', False)
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Handle login page and authentication"""
+    if request.method == 'GET':
+        # If already authenticated, redirect to dashboard
+        if is_authenticated():
+            return redirect(url_for('index'))
+        return render_template('login.html')
+    
+    # Handle POST request (authentication attempt)
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        otp_code = data.get('otp_code', '').strip()
+        
+        if not username or not password:
+            return jsonify({
+                'success': False,
+                'message': 'Username and password are required'
+            }), 400
+        
+        global monitor, monitor_thread, pending_credentials
+        
+        # Store credentials for authentication
+        with auth_lock:
+            pending_credentials = {
+                'username': username,
+                'password': password,
+                'otp_code': otp_code
+            }
+        
+        # Create a temporary config with credentials
+        config = load_config()
+        if not config:
+            return jsonify({
+                'success': False,
+                'message': 'Server configuration error'
+            }), 500
+        
+        # Override ring config with provided credentials
+        config['ring']['username'] = username
+        config['ring']['password'] = password
+        config['ring']['otp_code'] = otp_code
+        config['ring']['refresh_token'] = ''  # Clear any existing token
+        
+        # Try to authenticate
+        temp_monitor = RingMonitor(config)
+        auth_result = temp_monitor.authenticate()
+        
+        if auth_result == 'requires_otp' and not otp_code:
+            # OTP is required but not provided
+            return jsonify({
+                'success': False,
+                'requires_otp': True,
+                'message': 'Two-factor authentication code required'
+            }), 200
+        elif auth_result == True:
+            # Authentication successful
+            session['authenticated'] = True
+            session['username'] = username
+            session.permanent = True
+            
+            # Store the refresh token in session if available
+            if temp_monitor.config['ring'].get('refresh_token'):
+                session['refresh_token'] = temp_monitor.config['ring']['refresh_token']
+            
+            # Update global monitor with authenticated instance
+            with auth_lock:
+                monitor = temp_monitor
+                pending_credentials = None
+            
+            # Start monitoring if not already running
+            if not monitor_thread or not monitor_thread.is_alive():
+                monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
+                monitor_thread.start()
+            
+            logger.info(f"User {username} authenticated successfully")
+            return jsonify({
+                'success': True,
+                'message': 'Authentication successful'
+            }), 200
+        else:
+            # Authentication failed
+            return jsonify({
+                'success': False,
+                'message': 'Authentication failed. Please check your credentials.'
+            }), 401
+            
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
+@app.route('/logout')
+def logout():
+    """Handle logout"""
+    global monitor, monitor_thread
+    
+    username = session.get('username', 'Unknown')
+    session.clear()
+    
+    # Note: We don't stop the monitor thread as it's daemon and will stop with the app
+    # This allows other users to still see data if in a multi-user scenario
+    
+    logger.info(f"User {username} logged out")
+    return redirect(url_for('login'))
+
+
 @app.route('/')
 def index():
     """Serve the heat map dashboard"""
+    if not is_authenticated():
+        return redirect(url_for('login'))
     return render_template('index.html')
 
 
@@ -148,24 +270,29 @@ def main():
     """Main entry point"""
     global monitor, monitor_thread
     
-    # Load configuration
+    # Load configuration (monitoring settings only, not credentials)
     config = load_config()
     if not config:
         logger.error("Failed to load configuration")
         return
     
-    # Initialize monitor
+    # Clear any credentials from config file (we'll use web-based login)
+    config['ring']['username'] = ''
+    config['ring']['password'] = ''
+    config['ring']['otp_code'] = ''
+    config['ring']['refresh_token'] = ''
+    
+    # Initialize monitor without credentials (will be set via web login)
     monitor = RingMonitor(config)
     
-    # Start monitoring in background thread
-    monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
-    monitor_thread.start()
+    # Note: monitoring thread will start after successful login
     
     # Start web server
     host = config['server']['host']
     port = config['server']['port']
     
     logger.info(f"Starting Little Finger Monitor on http://{host}:{port}")
+    logger.info("Please open your browser and login to start monitoring")
     socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
 
 

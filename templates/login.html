@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Little Finger - Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-container {
+            background: #2a2a2a;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 450px;
+            width: 100%;
+            color: #ffffff;
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .login-header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .login-header .subtitle {
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #ccc;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #444;
+            border-radius: 6px;
+            background: #333;
+            color: #fff;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .form-group .help-text {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn-login:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn-login:active {
+            transform: translateY(0);
+        }
+        
+        .btn-login:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .alert {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .alert-error {
+            background: #f44336;
+            color: #fff;
+        }
+        
+        .alert-info {
+            background: #2196F3;
+            color: #fff;
+        }
+        
+        .alert-warning {
+            background: #ff9800;
+            color: #fff;
+        }
+        
+        .otp-section {
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        .otp-section.show {
+            display: block;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid #444;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>🕵️ Little Finger</h1>
+            <div class="subtitle">Ring Neighborhood Monitor</div>
+        </div>
+        
+        <div id="alertContainer"></div>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Ring Email Address</label>
+                <input type="email" id="username" name="username" required autocomplete="email">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Ring Password</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+            
+            <div class="form-group otp-section" id="otpSection">
+                <label for="otp_code">Two-Factor Authentication Code</label>
+                <input type="text" id="otp_code" name="otp_code" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code">
+                <div class="help-text">Enter the 6-digit code sent to your phone via SMS</div>
+            </div>
+            
+            <button type="submit" class="btn-login" id="loginButton">
+                <span id="buttonText">Login to Ring</span>
+            </button>
+        </form>
+        
+        <div class="loading" id="loadingIndicator">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; color: #aaa;">Authenticating...</p>
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('loginForm');
+        const otpSection = document.getElementById('otpSection');
+        const alertContainer = document.getElementById('alertContainer');
+        const loginButton = document.getElementById('loginButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        let requiresOtp = false;
+        
+        function showAlert(message, type = 'error') {
+            alertContainer.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+        }
+        
+        function clearAlert() {
+            alertContainer.innerHTML = '';
+        }
+        
+        function setLoading(loading) {
+            if (loading) {
+                form.style.display = 'none';
+                loadingIndicator.classList.add('show');
+            } else {
+                form.style.display = 'block';
+                loadingIndicator.classList.remove('show');
+            }
+        }
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            clearAlert();
+            
+            const formData = {
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value,
+                otp_code: document.getElementById('otp_code').value
+            };
+            
+            setLoading(true);
+            
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.success) {
+                        showAlert('Authentication successful! Redirecting...', 'info');
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 1000);
+                    } else if (data.requires_otp) {
+                        setLoading(false);
+                        showAlert('Two-factor authentication required. Please enter the code sent to your phone.', 'warning');
+                        otpSection.classList.add('show');
+                        document.getElementById('otp_code').focus();
+                        requiresOtp = true;
+                    } else {
+                        setLoading(false);
+                        showAlert(data.message || 'Authentication failed. Please try again.', 'error');
+                    }
+                } else {
+                    setLoading(false);
+                    showAlert(data.message || 'Authentication failed. Please check your credentials.', 'error');
+                }
+            } catch (error) {
+                setLoading(false);
+                console.error('Login error:', error);
+                showAlert('Connection error. Please try again.', 'error');
+            }
+        });
+        
+        // Auto-submit when OTP is entered (6 digits)
+        document.getElementById('otp_code').addEventListener('input', (e) => {
+            if (e.target.value.length === 6) {
+                form.dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>
