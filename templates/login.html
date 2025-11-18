@@ -232,22 +232,31 @@
         
         <div id="alertContainer"></div>
         
-        <!-- Browser-based login (recommended) -->
-        <div class="info-box" id="browserAuthBox">
-            <p><strong>🌐 Secure Browser Login (Recommended)</strong></p>
-            <p>Login directly through Ring's official website. Your credentials never pass through this app.</p>
+        <!-- Warning about browser auth not working -->
+        <div class="alert alert-warning" style="margin-bottom: 20px;">
+            <strong>⚠️ Important Notice:</strong> The browser-based login feature is <strong>experimental and not currently functional</strong> for Ring API authentication. It opens Ring's website but cannot extract the OAuth tokens needed. Please use the form-based login below.
         </div>
         
-        <button type="button" class="btn-browser-auth" id="browserAuthButton">
+        <!-- Browser-based login (EXPERIMENTAL - NOT WORKING) -->
+        <div class="info-box" id="browserAuthBox" style="opacity: 0.6;">
+            <p><strong>🌐 Browser Login (EXPERIMENTAL - NOT FUNCTIONAL)</strong></p>
+            <p>This feature opens Ring's website but cannot currently extract authentication tokens. Use form login below instead.</p>
+        </div>
+        
+        <button type="button" class="btn-browser-auth" id="browserAuthButton" disabled style="opacity: 0.5; cursor: not-allowed;">
             <span>🔐</span>
-            <span id="browserButtonText">Login via Ring Website</span>
+            <span id="browserButtonText">Browser Login (Not Working - Use Form Below)</span>
         </button>
         
         <div class="divider">
-            <span>OR</span>
+            <span>WORKING LOGIN METHOD BELOW</span>
         </div>
         
-        <!-- Traditional form-based login -->
+        <!-- Traditional form-based login (THIS WORKS!) -->
+        <div class="info-box" style="border-left-color: #4CAF50; background: #1a2a1a;">
+            <p><strong>✅ Recommended: Form-Based Login (WORKS RELIABLY)</strong></p>
+            <p>Enter your Ring credentials below to authenticate with Ring's API.</p>
+        </div>
         <form id="loginForm">
             <div class="form-group">
                 <label for="username">Ring Email Address</label>

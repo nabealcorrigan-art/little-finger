@@ -68,49 +68,51 @@ pip install -r requirements.txt
 
 ### Authentication
 
+> **⚠️ BROWSER LOGIN STATUS**: The browser-based authentication feature is experimental and **does not currently work**. See [BROWSER_AUTH_STATUS.md](BROWSER_AUTH_STATUS.md) for technical details. **Please use form-based login** which works reliably.
+
 The application supports **two authentication methods**:
 
-#### 🔐 Browser-Based Login (Recommended)
-
-The most secure method - login directly through Ring's official website:
-
-1. Start the server (see Usage below)
-2. Open your browser and navigate to `http://localhost:5777`
-3. Click **"Login via Ring Website"** button
-4. A browser window opens to Ring's official login page
-5. Login with your Ring credentials on Ring's website
-6. Complete any 2FA verification if enabled
-7. You'll be automatically redirected to the monitoring dashboard
-
-**Benefits:**
-- ✅ Most secure - credentials never pass through the app
-- ✅ Full support for Ring's 2FA and security features
-- ✅ Login directly on Ring's trusted website
-- ✅ Session persistence across restarts
-
-**Setup:**
-```bash
-# Install browser automation
-playwright install chromium
-```
-
-For detailed browser authentication setup and troubleshooting, see [BROWSER_AUTH_GUIDE.md](BROWSER_AUTH_GUIDE.md).
-
-#### 📝 Form-Based Login (Alternative)
+#### 📝 Form-Based Login (Recommended - Works Reliably)
 
 Traditional method where you enter credentials in the app:
 
 1. Start the server (see Usage below)
 2. Open your browser and navigate to `http://localhost:5777`
 3. Enter your Ring email address and password in the form
-4. If your account has 2FA enabled, enter the 6-digit OTP code
+4. If your account has 2FA enabled, enter the 6-digit OTP code sent via SMS
 5. After successful authentication, you'll be redirected to the monitoring dashboard
 
 **Security Features**:
-- Credentials are never stored in files
-- Session-based authentication
-- Refresh tokens are stored securely
+- Credentials are only used to authenticate with Ring's API via the ring-doorbell library
+- Session-based authentication with secure session keys
+- Refresh tokens are stored securely in memory
 - Logout functionality to clear your session
+
+**⚠️ Important:** This is the **only authentication method that currently works reliably** with the Ring API.
+
+#### 🔐 Browser-Based Login (Experimental - Not Fully Functional)
+
+**⚠️ STATUS: This feature is EXPERIMENTAL and does NOT currently work for Ring API authentication.**
+
+While the browser automation successfully opens Ring's website and allows you to login, it **cannot currently extract the OAuth tokens** needed to authenticate with Ring's API. This is because:
+
+- Ring's OAuth tokens are not stored in accessible browser storage (localStorage/sessionStorage)
+- The Ring website uses a different authentication flow than what the ring-doorbell library expects
+- API endpoint interception has not been successfully implemented to capture the refresh tokens
+
+**What it does:**
+- Opens a browser window to Ring's login page
+- Allows you to login through Ring's official website
+- Captures cookies and browser session data
+
+**What it CANNOT do (currently):**
+- Extract the OAuth refresh token needed for the ring-doorbell library
+- Successfully authenticate the Ring monitor
+- Enable neighborhood post monitoring
+
+**If you want to help fix this:** The implementation needs work in `ring_browser_auth.py` to properly intercept Ring's OAuth token API calls or extract tokens from the authenticated browser session. Contributions welcome!
+
+For now, **please use the Form-Based Login method** which works reliably.
 
 ## Usage
 
@@ -176,10 +178,10 @@ The server will start on `http://0.0.0.0:5777` by default.
 ## API Endpoints
 
 ### Authentication
-- `GET /login`: Login page with browser and form-based authentication options
+- `GET /login`: Login page with form-based authentication (browser auth is experimental)
 - `POST /login`: Form-based authentication endpoint (accepts JSON with username, password, otp_code)
-- `POST /auth/browser/start`: Start browser-based authentication (opens Ring's login page)
-- `GET /auth/browser/status`: Check browser authentication status
+- `POST /auth/browser/start`: ⚠️ EXPERIMENTAL - Start browser-based authentication (does not currently work for Ring API)
+- `GET /auth/browser/status`: ⚠️ EXPERIMENTAL - Check browser authentication status (not functional)
 - `GET /logout`: Logout and clear session
 
 ### Application
@@ -193,9 +195,9 @@ The server will start on `http://0.0.0.0:5777` by default.
 ## Dashboard Features
 
 ### Authentication
-- **Browser-Based Login (Recommended)**: Login directly through Ring's official website
-- **Form-Based Login**: Traditional login form for entering credentials
-- **2FA Support**: Full support for Ring's two-factor authentication
+- **Form-Based Login (Recommended)**: Enter Ring credentials to authenticate with Ring's API - WORKS RELIABLY
+- **Browser-Based Login (Experimental)**: ⚠️ Opens Ring's website but cannot extract API tokens - NOT FUNCTIONAL
+- **2FA Support**: Full support for Ring's two-factor authentication via SMS OTP codes in form-based login
 - **Session Management**: Stay logged in across browser sessions
 - **Logout**: Clear session and return to login page
 
