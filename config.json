@@ -2,7 +2,8 @@
   "ring": {
     "username": "",
     "password": "",
-    "refresh_token": ""
+    "refresh_token": "",
+    "otp_code": ""
   },
   "monitoring": {
     "poll_interval_seconds": 60,
