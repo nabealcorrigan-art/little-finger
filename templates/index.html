@@ -220,6 +220,23 @@
             font-size: 12px;
         }
         
+        .logout-button {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-bottom: 15px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        
+        .logout-button:hover {
+            background: #d32f2f;
+        }
+        
         .no-matches {
             text-align: center;
             padding: 30px;
@@ -236,6 +253,8 @@
     
     <div class="container">
         <div class="sidebar">
+            <button class="logout-button" onclick="logout()">Logout</button>
+            
             <div class="connection-status">
                 <span class="status-indicator disconnected" id="statusIndicator"></span>
                 <span id="statusText">Connecting...</span>
@@ -501,6 +520,13 @@
         
         // Filter by 'all' on page load
         document.querySelector('[data-term="all"]').onclick = () => filterByTerm('all');
+        
+        // Logout function
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = '/logout';
+            }
+        }
     </script>
 </body>
 </html>

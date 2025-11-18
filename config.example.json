@@ -1,11 +1,11 @@
 {
   "ring": {
-    "username": "your-email@example.com",
-    "password": "your-password",
+    "username": "",
+    "password": "",
     "refresh_token": "",
     "otp_code": "",
-    "_comment": "After first login, refresh_token will be saved automatically",
-    "_comment_otp": "If 2FA/SMS auth is required, enter the code here or you'll be prompted interactively"
+    "_comment": "Ring authentication is now handled via the web UI login page",
+    "_comment_credentials": "Leave username and password empty - you'll enter them in the browser"
   },
   "monitoring": {
     "poll_interval_seconds": 60,

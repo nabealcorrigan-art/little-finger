@@ -34,7 +34,13 @@ class RingMonitor:
         self.auth = None
         
     def authenticate(self):
-        """Authenticate with Ring API"""
+        """Authenticate with Ring API
+        
+        Returns:
+            True: Authentication successful
+            'requires_otp': OTP code is required
+            False: Authentication failed
+        """
         if not Auth:
             logger.warning("Ring API not available, running in mock mode")
             return False
@@ -50,55 +56,47 @@ class RingMonitor:
                     ring_config['refresh_token'],
                     token_updated_callback=self._token_updated
                 )
+                self.ring = Ring(self.auth)
+                logger.info("Successfully authenticated with Ring")
+                return True
             else:
                 logger.info("Authenticating with username/password...")
                 self.auth = Auth(
                     "Little Finger Monitor"
                 )
                 
-                # Get OTP code from config or prompt user
+                # Get OTP code from config
                 otp_code = ring_config.get('otp_code', '').strip()
                 
-                # If no OTP code in config, try initial authentication
-                if not otp_code:
-                    try:
-                        self.auth.fetch_token(
-                            ring_config['username'],
-                            ring_config['password']
-                        )
-                    except Exception as e:
-                        # Check if error is related to 2FA
-                        error_msg = str(e).lower()
-                        if '2fa' in error_msg or 'verification' in error_msg or 'code' in error_msg:
-                            logger.info("2FA/SMS authentication required")
-                            logger.info("Please enter the verification code you received via SMS:")
-                            # Try to read OTP code interactively
-                            try:
-                                import sys
-                                if sys.stdin.isatty():
-                                    otp_code = input("Enter OTP code: ").strip()
-                                else:
-                                    logger.error("2FA code required but running in non-interactive mode")
-                                    logger.error("Please add 'otp_code' to your config.json file")
-                                    raise
-                            except (EOFError, KeyboardInterrupt):
-                                logger.error("OTP input cancelled")
-                                raise
-                        else:
-                            raise
-                
-                # Authenticate with OTP code if provided
-                if otp_code:
-                    logger.info("Authenticating with OTP code...")
+                # Try initial authentication without OTP
+                try:
                     self.auth.fetch_token(
                         ring_config['username'],
-                        ring_config['password'],
-                        otp_code=otp_code
+                        ring_config['password']
                     )
-                
-            self.ring = Ring(self.auth)
-            logger.info("Successfully authenticated with Ring")
-            return True
+                    self.ring = Ring(self.auth)
+                    logger.info("Successfully authenticated with Ring")
+                    return True
+                except Exception as e:
+                    # Check if error is related to 2FA
+                    error_msg = str(e).lower()
+                    if '2fa' in error_msg or 'verification' in error_msg or 'code' in error_msg or 'otp' in error_msg:
+                        if not otp_code:
+                            logger.info("2FA/SMS authentication required")
+                            return 'requires_otp'
+                        else:
+                            # Try authentication with OTP code
+                            logger.info("Authenticating with OTP code...")
+                            self.auth.fetch_token(
+                                ring_config['username'],
+                                ring_config['password'],
+                                otp_code=otp_code
+                            )
+                            self.ring = Ring(self.auth)
+                            logger.info("Successfully authenticated with Ring")
+                            return True
+                    else:
+                        raise
             
         except Exception as e:
             logger.error(f"Authentication failed: {e}")
