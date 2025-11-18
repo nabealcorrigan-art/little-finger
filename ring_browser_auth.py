@@ -7,6 +7,7 @@ import logging
 import asyncio
 from typing import Optional, Dict
 from playwright.async_api import async_playwright, Page, Browser, BrowserContext
+from urllib.parse import urlparse
 import time
 
 logging.basicConfig(level=logging.INFO)
@@ -70,9 +71,13 @@ class RingBrowserAuth:
         # Wait for redirect to dashboard or successful login indicator
         while time.time() - start_time < timeout_seconds:
             current_url = self.page.url
+            parsed_url = urlparse(current_url)
             
-            # Check if we've been redirected to dashboard (successful login)
-            if "dashboard" in current_url or "account.ring.com" in current_url and "login" not in current_url:
+            # Check if we've been redirected to Ring's account domain (successful login)
+            # Verify we're on the right domain and not on the login page
+            if (parsed_url.hostname == "account.ring.com" and 
+                "dashboard" in parsed_url.path and 
+                "login" not in parsed_url.path):
                 logger.info(f"Authentication successful! Redirected to: {current_url}")
                 break
                 
