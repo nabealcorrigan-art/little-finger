@@ -127,26 +127,6 @@
             color: #fff;
         }
         
-        .otp-section {
-            display: none;
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        .otp-section.show {
-            display: block;
-        }
-        
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
         .loading {
             text-align: center;
             padding: 20px;
@@ -193,10 +173,10 @@
                 <input type="password" id="password" name="password" required autocomplete="current-password">
             </div>
             
-            <div class="form-group otp-section" id="otpSection">
-                <label for="otp_code">Two-Factor Authentication Code</label>
-                <input type="text" id="otp_code" name="otp_code" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code">
-                <div class="help-text">Enter the 6-digit code sent to your phone via SMS</div>
+            <div class="form-group" id="otpSection">
+                <label for="otp_code">Two-Factor Authentication Code (Optional)</label>
+                <input type="text" id="otp_code" name="otp_code" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="Enter if 2FA is enabled">
+                <div class="help-text">Enter the 6-digit code sent to your phone via SMS (leave blank if 2FA is not enabled)</div>
             </div>
             
             <button type="submit" class="btn-login" id="loginButton">
@@ -269,8 +249,7 @@
                         }, 1000);
                     } else if (data.requires_otp) {
                         setLoading(false);
-                        showAlert('Two-factor authentication required. Please enter the code sent to your phone.', 'warning');
-                        otpSection.classList.add('show');
+                        showAlert('Two-factor authentication code required. Please enter the code sent to your phone in the OTP field above.', 'warning');
                         document.getElementById('otp_code').focus();
                         requiresOtp = true;
                     } else {
@@ -285,13 +264,6 @@
                 setLoading(false);
                 console.error('Login error:', error);
                 showAlert('Connection error. Please try again.', 'error');
-            }
-        });
-        
-        // Auto-submit when OTP is entered (6 digits)
-        document.getElementById('otp_code').addEventListener('input', (e) => {
-            if (e.target.value.length === 6) {
-                form.dispatchEvent(new Event('submit'));
             }
         });
     </script>
