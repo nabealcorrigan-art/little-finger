@@ -32,6 +32,11 @@ class RingMonitor:
         self.matches: List[Dict] = []
         self.ring = None
         self.auth = None
+    
+    @property
+    def is_authenticated(self):
+        """Check if monitor is authenticated with Ring"""
+        return self.ring is not None
         
     def authenticate(self):
         """Authenticate with Ring API

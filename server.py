@@ -202,13 +202,22 @@ def start_browser_auth():
                 'message': 'Already authenticated'
             }), 400
         
+        # Check if browser auth is already in progress
+        if browser_auth is not None:
+            return jsonify({
+                'success': False,
+                'message': 'Browser authentication already in progress'
+            }), 400
+        
+        # Initialize browser_auth before starting thread so status endpoint can see it
+        browser_auth = RingBrowserAuth(headless=False)
+        
         # Run async auth in a separate thread
         def run_auth():
             global browser_auth
             
             async def do_auth():
-                global browser_auth
-                browser_auth = RingBrowserAuth(headless=False)
+                global browser_auth, monitor, monitor_thread
                 
                 try:
                     await browser_auth.start_browser()
@@ -220,18 +229,16 @@ def start_browser_auth():
                     # Save the auth state
                     await browser_auth.save_auth_state(auth_state_file)
                     
-                    # Store in session
-                    session['auth_data'] = {
-                        'timestamp': auth_data['timestamp'],
-                        'has_cookies': len(auth_data['cookies']) > 0
-                    }
-                    session['authenticated'] = True
-                    session['auth_method'] = 'browser'
-                    
                     logger.info("Browser authentication successful")
                     
                     # Initialize monitor with the captured session
                     await initialize_monitor_from_browser_auth(auth_data)
+                    
+                    # Mark as authenticated (using Flask's session requires app context)
+                    with app.app_context():
+                        from flask import session as flask_session
+                        # Note: Session modifications in thread won't persist
+                        # The client-side polling will detect successful auth via monitor state
                     
                 except Exception as e:
                     logger.error(f"Browser authentication failed: {e}")
@@ -253,6 +260,7 @@ def start_browser_auth():
         
     except Exception as e:
         logger.error(f"Error starting browser auth: {e}")
+        browser_auth = None  # Reset on error
         return jsonify({
             'success': False,
             'message': str(e)
@@ -262,6 +270,17 @@ def start_browser_auth():
 @app.route('/auth/browser/status', methods=['GET'])
 def check_browser_auth_status():
     """Check status of browser authentication"""
+    # Check if monitor is authenticated (indicates successful browser auth)
+    if monitor and monitor.is_authenticated:
+        # Mark session as authenticated
+        session['authenticated'] = True
+        session['auth_method'] = 'browser'
+        return jsonify({
+            'authenticated': True,
+            'method': 'browser'
+        }), 200
+    
+    # Fall back to session check
     if is_authenticated():
         return jsonify({
             'authenticated': True,
