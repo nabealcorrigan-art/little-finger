@@ -68,6 +68,8 @@ pip install -r requirements.txt
 
 ### Authentication
 
+> **⚠️ BROWSER LOGIN STATUS**: The browser-based authentication feature is experimental and **does not currently work**. See [BROWSER_AUTH_STATUS.md](BROWSER_AUTH_STATUS.md) for technical details. **Please use form-based login** which works reliably.
+
 The application supports **two authentication methods**:
 
 #### 📝 Form-Based Login (Recommended - Works Reliably)
