@@ -226,12 +226,32 @@
             color: #666;
             font-style: italic;
         }
+        
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            float: right;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>🕵️ Little Finger - Ring Neighborhood Monitor</h1>
-        <div class="subtitle">Real-time monitoring and heat map visualization of Ring neighborhood posts</div>
+        <div class="subtitle">
+            Real-time monitoring and heat map visualization of Ring neighborhood posts
+            <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+        </div>
     </div>
     
     <div class="container">
@@ -497,6 +517,26 @@
                     document.getElementById('monitoringCount').textContent = `${totalTerms} terms`;
                 })
                 .catch(error => console.error('Error updating stats:', error));
+        }
+        
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/api/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    console.error('Logout failed');
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
         }
         
         // Filter by 'all' on page load

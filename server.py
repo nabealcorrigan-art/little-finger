@@ -4,23 +4,27 @@ Serves real-time heat map of detected Ring neighborhood posts
 """
 import json
 import logging
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from threading import Thread
 from ring_monitor import RingMonitor
+from functools import wraps
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'little-finger-secret-key'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global monitor instance
 monitor = None
 monitor_thread = None
+is_authenticated = False
 
 
 def load_config():
@@ -51,6 +55,42 @@ def load_config():
         return None
 
 
+def save_config(config):
+    """Save configuration to JSON file"""
+    try:
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving config: {e}")
+        return False
+
+
+def check_credentials_configured():
+    """Check if Ring credentials are configured"""
+    config = load_config()
+    if not config:
+        return False
+    ring_config = config.get('ring', {})
+    username = ring_config.get('username', '').strip()
+    password = ring_config.get('password', '').strip()
+    refresh_token = ring_config.get('refresh_token', '').strip()
+    
+    # Valid if we have refresh token OR username+password
+    return bool(refresh_token or (username and password))
+
+
+def login_required(f):
+    """Decorator to require login for routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        global is_authenticated
+        if not is_authenticated and not session.get('authenticated'):
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def on_new_match(match):
     """Callback for new matches - emit via SocketIO"""
     logger.info(f"Broadcasting new match: {match['id']}")
@@ -65,9 +105,97 @@ def start_monitoring_thread():
 
 
 @app.route('/')
+@login_required
 def index():
     """Serve the heat map dashboard"""
     return render_template('index.html')
+
+
+@app.route('/login')
+def login_page():
+    """Serve the login page"""
+    global is_authenticated
+    # If already authenticated, redirect to dashboard
+    if is_authenticated or session.get('authenticated'):
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """Handle login request"""
+    global monitor, monitor_thread, is_authenticated
+    
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        otp_code = data.get('otp_code', '').strip()
+        
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+        
+        # Load config and update credentials
+        config = load_config()
+        if not config:
+            return jsonify({'error': 'Failed to load configuration'}), 500
+        
+        config['ring']['username'] = username
+        config['ring']['password'] = password
+        config['ring']['otp_code'] = otp_code
+        
+        # Save config
+        if not save_config(config):
+            return jsonify({'error': 'Failed to save credentials'}), 500
+        
+        # Try to authenticate
+        test_monitor = RingMonitor(config)
+        auth_result = test_monitor.authenticate()
+        
+        if auth_result:
+            # Authentication successful
+            session['authenticated'] = True
+            is_authenticated = True
+            
+            # Update global monitor and start monitoring
+            monitor = test_monitor
+            if not monitor_thread or not monitor_thread.is_alive():
+                monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
+                monitor_thread.start()
+            
+            # Clear OTP from config after successful auth
+            config['ring']['otp_code'] = ''
+            save_config(config)
+            
+            logger.info(f"User {username} logged in successfully")
+            return jsonify({'success': True})
+        else:
+            # Check if OTP is needed
+            error_msg = 'Authentication failed. Please check your credentials.'
+            requires_otp = not otp_code
+            
+            if requires_otp:
+                return jsonify({
+                    'success': False,
+                    'requires_otp': True,
+                    'message': '2FA verification required'
+                })
+            
+            return jsonify({'error': error_msg}), 401
+            
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """Handle logout request"""
+    global is_authenticated
+    session.clear()
+    is_authenticated = False
+    logger.info("User logged out")
+    return jsonify({'success': True})
 
 
 @app.route('/api/matches')
@@ -146,7 +274,7 @@ def handle_disconnect():
 
 def main():
     """Main entry point"""
-    global monitor, monitor_thread
+    global monitor, monitor_thread, is_authenticated
     
     # Load configuration
     config = load_config()
@@ -154,12 +282,25 @@ def main():
         logger.error("Failed to load configuration")
         return
     
-    # Initialize monitor
-    monitor = RingMonitor(config)
-    
-    # Start monitoring in background thread
-    monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
-    monitor_thread.start()
+    # Check if credentials are configured and valid
+    if check_credentials_configured():
+        logger.info("Credentials found in config, attempting authentication...")
+        # Initialize monitor
+        monitor = RingMonitor(config)
+        
+        # Try to authenticate
+        if monitor.authenticate():
+            is_authenticated = True
+            # Start monitoring in background thread
+            monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
+            monitor_thread.start()
+            logger.info("Authenticated successfully, monitoring started")
+        else:
+            logger.warning("Authentication failed with existing credentials")
+            logger.info("Please login through the web interface")
+    else:
+        logger.info("No credentials configured, login required")
+        logger.info("Please navigate to the web interface to login")
     
     # Start web server
     host = config['server']['host']
