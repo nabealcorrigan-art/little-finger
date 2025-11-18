@@ -3,7 +3,9 @@
     "username": "your-email@example.com",
     "password": "your-password",
     "refresh_token": "",
-    "_comment": "After first login, refresh_token will be saved automatically"
+    "otp_code": "",
+    "_comment": "After first login, refresh_token will be saved automatically",
+    "_comment_otp": "If 2FA/SMS auth is required, enter the code here or you'll be prompted interactively"
   },
   "monitoring": {
     "poll_interval_seconds": 60,

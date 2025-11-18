@@ -49,7 +49,8 @@ pip install -r requirements.txt
   "ring": {
     "username": "your-ring-email@example.com",
     "password": "your-ring-password",
-    "refresh_token": ""
+    "refresh_token": "",
+    "otp_code": ""
   },
   "monitoring": {
     "poll_interval_seconds": 60,
@@ -64,6 +65,28 @@ pip install -r requirements.txt
 ```
 
 **Important**: Create a copy as `config.local.json` for your personal credentials (this file is ignored by git).
+
+### Two-Factor Authentication (2FA/SMS)
+
+If your Ring account has 2FA enabled, you have two options to provide the verification code:
+
+**Option 1: Add to config.json** (easiest for automated/headless deployments)
+```json
+{
+  "ring": {
+    "username": "your-ring-email@example.com",
+    "password": "your-ring-password",
+    "otp_code": "123456"
+  }
+}
+```
+
+**Option 2: Interactive prompt** (when running manually)
+- Leave `otp_code` empty in config.json
+- When you start the app, it will prompt you to enter the code
+- Enter the 6-digit code you received via SMS
+
+**Note**: After successful authentication, a refresh token is saved automatically, so you won't need the OTP code for subsequent runs.
 
 ## Usage
 
@@ -208,8 +231,14 @@ python server.py
 
 ### Authentication Issues
 - Verify your Ring credentials are correct
-- Check if 2FA is enabled (you may need to generate an app-specific password)
+- **2FA/SMS Code**: If you have 2FA enabled:
+  - Add the OTP code to `config.json` under `ring.otp_code`, OR
+  - Run the app interactively and enter the code when prompted
+  - After successful login, the refresh token is saved automatically
+  - Remove the OTP code from config after first successful authentication
+- Check if 2FA is enabled (you may need to provide SMS verification code)
 - Look for refresh_token in the logs after first successful authentication
+- For non-interactive/headless mode, always provide `otp_code` in config.json if 2FA is required
 
 ### No Matches Appearing
 - Verify keywords/emojis are configured correctly
