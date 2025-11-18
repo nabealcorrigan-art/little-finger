@@ -43,12 +43,12 @@ cd little-finger
 pip install -r requirements.txt
 ```
 
-3. Configure the application by editing `config.json`:
+3. Configure monitoring settings in `config.json`:
 ```json
 {
   "ring": {
-    "username": "your-ring-email@example.com",
-    "password": "your-ring-password",
+    "username": "",
+    "password": "",
     "refresh_token": "",
     "otp_code": ""
   },
@@ -64,29 +64,24 @@ pip install -r requirements.txt
 }
 ```
 
-**Important**: Create a copy as `config.local.json` for your personal credentials (this file is ignored by git).
+**Note**: You no longer need to add credentials to `config.json`. The application uses a web-based login interface.
 
-### Two-Factor Authentication (2FA/SMS)
+### Authentication
 
-If your Ring account has 2FA enabled, you have two options to provide the verification code:
+The application uses a **web-based login interface** instead of hardcoded credentials:
 
-**Option 1: Add to config.json** (easiest for automated/headless deployments)
-```json
-{
-  "ring": {
-    "username": "your-ring-email@example.com",
-    "password": "your-ring-password",
-    "otp_code": "123456"
-  }
-}
-```
+1. Start the server (see Usage below)
+2. Open your browser and navigate to `http://localhost:5777`
+3. You'll be automatically redirected to the login page
+4. Enter your Ring email address and password
+5. If your account has 2FA enabled, you'll be prompted to enter the 6-digit OTP code
+6. After successful authentication, you'll be redirected to the monitoring dashboard
 
-**Option 2: Interactive prompt** (when running manually)
-- Leave `otp_code` empty in config.json
-- When you start the app, it will prompt you to enter the code
-- Enter the 6-digit code you received via SMS
-
-**Note**: After successful authentication, a refresh token is saved automatically, so you won't need the OTP code for subsequent runs.
+**Security Features**:
+- Credentials are never stored in files
+- Session-based authentication
+- Refresh tokens are stored in memory only
+- Logout functionality to clear your session
 
 ## Usage
 
@@ -113,30 +108,33 @@ python server.py
 
 For containerized deployment:
 
-1. Copy your config file:
-```bash
-cp config.example.json config.local.json
-# Edit config.local.json with your credentials
-```
-
-2. Start with Docker Compose:
+1. Start with Docker Compose:
 ```bash
 docker-compose up -d
 ```
 
-3. Or build and run manually:
+2. Or build and run manually:
 ```bash
 docker build -t little-finger .
-docker run -p 5777:5777 -v $(pwd)/config.local.json:/app/config.json little-finger
+docker run -p 5777:5777 little-finger
 ```
 
 The server will start on `http://0.0.0.0:5777` by default.
 
-### Accessing the Dashboard
+### Accessing the Application
 
-Open your browser and navigate to:
-- `http://localhost:5777` (if running locally)
-- `http://YOUR_SERVER_IP:5777` (if running on a remote server)
+1. Open your browser and navigate to:
+   - `http://localhost:5777` (if running locally)
+   - `http://YOUR_SERVER_IP:5777` (if running on a remote server)
+
+2. You'll be automatically redirected to the login page
+
+3. Enter your Ring credentials:
+   - Ring email address
+   - Ring password
+   - OTP code (if 2FA is enabled on your account)
+
+4. After successful login, the monitoring dashboard will appear and monitoring will begin automatically
 
 ### Configuration Options
 
@@ -148,7 +146,10 @@ Open your browser and navigate to:
 
 ## API Endpoints
 
-- `GET /`: Dashboard interface
+- `GET /`: Dashboard interface (requires authentication)
+- `GET /login`: Login page
+- `POST /login`: Authentication endpoint (accepts JSON with username, password, otp_code)
+- `GET /logout`: Logout and clear session
 - `GET /api/matches`: Get all detected matches
 - `GET /api/matches/filter?term=<term>`: Filter matches by keyword or emoji
 - `GET /api/stats`: Get monitoring statistics
@@ -156,6 +157,12 @@ Open your browser and navigate to:
 - WebSocket `/`: Real-time match updates
 
 ## Dashboard Features
+
+### Authentication
+- **Web-Based Login**: Secure login page for entering credentials
+- **2FA Support**: Automatic OTP field when two-factor authentication is required
+- **Session Management**: Stay logged in across browser sessions
+- **Logout**: Clear session and return to login page
 
 ### Heat Map
 - **Intensity Colors**: Blue (low) → Green → Yellow → Orange → Red (high)
@@ -201,11 +208,19 @@ The application includes robust testing capabilities:
 
 ## Security Considerations
 
-- Never commit your `config.local.json` with real credentials
-- Use HTTPS when exposing the server over the internet
-- Consider implementing authentication for the dashboard
-- Refresh tokens are automatically saved when received from Ring API
-- Keep your Ring credentials secure
+### Built-in Security Features
+- **No Hardcoded Credentials**: All authentication happens through the web UI
+- **Session-based Authentication**: Credentials are not stored in files
+- **Secure Session Keys**: Generated randomly on each server start
+- **Logout Functionality**: Clear sessions when done
+- **In-memory Token Storage**: Refresh tokens stored only in session, not persisted to disk
+
+### Production Recommendations
+- Use HTTPS when exposing the server over the internet (use reverse proxy like nginx/caddy)
+- Consider adding rate limiting on login endpoint
+- Use environment variables or secrets manager for sensitive configuration
+- Regular dependency updates for security patches
+- Monitor access logs for suspicious activity
 
 ## Headless Operation
 
@@ -221,6 +236,8 @@ python server.py
 # Press Ctrl+A then D to detach
 ```
 
+Access the web interface from any browser on your network.
+
 ## Troubleshooting
 
 ### Ring API Connection
@@ -230,18 +247,14 @@ python server.py
 - **See**: [RING_API_DETAILS.md](RING_API_DETAILS.md) for detailed information about Ring API access
 
 ### Authentication Issues
-- Verify your Ring credentials are correct
-- **2FA/SMS Code**: If you have 2FA enabled:
-  - Add the OTP code to `config.json` under `ring.otp_code`, OR
-  - Run the app interactively and enter the code when prompted
-  - After successful login, the refresh token is saved automatically
-  - Remove the OTP code from config after first successful authentication
-- Check if 2FA is enabled (you may need to provide SMS verification code)
-- Look for refresh_token in the logs after first successful authentication
-- For non-interactive/headless mode, always provide `otp_code` in config.json if 2FA is required
+- **Login Page Not Loading**: Ensure the server is running and accessible
+- **Invalid Credentials**: Verify your Ring email and password are correct
+- **2FA Required**: The OTP field will appear automatically when needed - enter the 6-digit code sent via SMS
+- **Session Expired**: Simply reload the page and login again
+- **Connection Failed**: Check network connectivity and server logs
 
 ### No Matches Appearing
-- Verify keywords/emojis are configured correctly
+- Verify keywords/emojis are configured correctly in `config.json`
 - Check the poll interval isn't too long
 - Ensure Ring neighborhood posts are available in your area
 - Check logs for any API errors
