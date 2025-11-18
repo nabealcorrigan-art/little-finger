@@ -13,6 +13,7 @@ A headless monitoring application for Ring Neighborhood that tracks specified ke
 - ⏰ **Precise Timestamps**: Each match includes exact detection time and post time
 - 📍 **Location Tracking**: Captures and displays the geographical location of each match
 - 📊 **Statistics Dashboard**: View match counts and monitoring statistics
+- 🔐 **Web-Based Login**: User-friendly login interface with session management and 2FA support
 
 ## Architecture
 
@@ -43,7 +44,22 @@ cd little-finger
 pip install -r requirements.txt
 ```
 
-3. Configure the application by editing `config.json`:
+3. Start the application:
+```bash
+python server.py
+```
+
+4. Open your web browser and navigate to `http://localhost:5777`
+
+5. **Login through the web interface**:
+   - You'll be automatically redirected to the login page if not authenticated
+   - Enter your Ring email address and password
+   - If 2FA is enabled, enter the verification code when prompted
+   - Your credentials will be saved securely and monitoring will start automatically
+
+**Alternative: Manual Configuration** (optional for advanced users or automated deployments):
+
+You can pre-configure credentials by editing `config.json`:
 ```json
 {
   "ring": {
@@ -68,9 +84,15 @@ pip install -r requirements.txt
 
 ### Two-Factor Authentication (2FA/SMS)
 
-If your Ring account has 2FA enabled, you have two options to provide the verification code:
+The application fully supports 2FA through the web interface:
 
-**Option 1: Add to config.json** (easiest for automated/headless deployments)
+**Web Interface (Recommended)**:
+- Enter your email and password on the login page
+- If 2FA is required, an OTP input field will appear automatically
+- Enter the 6-digit code you received via SMS
+- The application will authenticate and save your session
+
+**Manual Configuration** (for automated/headless deployments):
 ```json
 {
   "ring": {
@@ -80,11 +102,6 @@ If your Ring account has 2FA enabled, you have two options to provide the verifi
   }
 }
 ```
-
-**Option 2: Interactive prompt** (when running manually)
-- Leave `otp_code` empty in config.json
-- When you start the app, it will prompt you to enter the code
-- Enter the 6-digit code you received via SMS
 
 **Note**: After successful authentication, a refresh token is saved automatically, so you won't need the OTP code for subsequent runs.
 
@@ -138,6 +155,17 @@ Open your browser and navigate to:
 - `http://localhost:5777` (if running locally)
 - `http://YOUR_SERVER_IP:5777` (if running on a remote server)
 
+**First Time Setup**:
+1. You'll be redirected to the login page automatically
+2. Enter your Ring credentials
+3. Complete 2FA verification if required
+4. You'll be redirected to the dashboard upon successful authentication
+
+**Subsequent Visits**:
+- If you have a valid session, you'll see the dashboard directly
+- If your session expired or you logged out, you'll be prompted to login again
+- Use the logout button in the dashboard header to end your session
+
 ### Configuration Options
 
 - **poll_interval_seconds**: How often to check for new posts (default: 60 seconds)
@@ -148,7 +176,10 @@ Open your browser and navigate to:
 
 ## API Endpoints
 
-- `GET /`: Dashboard interface
+- `GET /`: Dashboard interface (requires authentication)
+- `GET /login`: Login page
+- `POST /api/login`: Authenticate with Ring credentials
+- `POST /api/logout`: End current session
 - `GET /api/matches`: Get all detected matches
 - `GET /api/matches/filter?term=<term>`: Filter matches by keyword or emoji
 - `GET /api/stats`: Get monitoring statistics
@@ -201,11 +232,15 @@ The application includes robust testing capabilities:
 
 ## Security Considerations
 
-- Never commit your `config.local.json` with real credentials
-- Use HTTPS when exposing the server over the internet
-- Consider implementing authentication for the dashboard
+- **Session Management**: The application uses Flask sessions with HTTP-only cookies for security
+- **Credential Storage**: Credentials are stored in `config.json` - ensure this file has appropriate permissions (chmod 600)
+- Never commit your `config.local.json` or `config.json` with real credentials to version control
+- Use HTTPS when exposing the server over the internet (consider using a reverse proxy like nginx)
+- **Production Deployment**: Use a production WSGI server (like Gunicorn) instead of Flask's development server
 - Refresh tokens are automatically saved when received from Ring API
-- Keep your Ring credentials secure
+- The application implements CSRF protection through Flask's secret key
+- Keep your Ring credentials secure and rotate passwords regularly
+- Consider using environment variables for sensitive configuration in production
 
 ## Headless Operation
 
@@ -230,13 +265,15 @@ python server.py
 - **See**: [RING_API_DETAILS.md](RING_API_DETAILS.md) for detailed information about Ring API access
 
 ### Authentication Issues
+- **Web Login (Recommended)**: Use the web interface at `http://localhost:5777/login` to enter credentials
 - Verify your Ring credentials are correct
 - **2FA/SMS Code**: If you have 2FA enabled:
-  - Add the OTP code to `config.json` under `ring.otp_code`, OR
-  - Run the app interactively and enter the code when prompted
+  - The web interface will automatically prompt for the OTP code
+  - Enter the 6-digit code you received via SMS
   - After successful login, the refresh token is saved automatically
-  - Remove the OTP code from config after first successful authentication
-- Check if 2FA is enabled (you may need to provide SMS verification code)
+- **Manual Config**: Alternatively, add credentials to `config.json` and restart the server
+- If authentication fails, check the server logs for detailed error messages
+- For automated/headless deployments, pre-configure credentials in config.json with OTP if needed
 - Look for refresh_token in the logs after first successful authentication
 - For non-interactive/headless mode, always provide `otp_code` in config.json if 2FA is required
 
