@@ -30,7 +30,7 @@ echo "🔧 Activating virtual environment..."
 source venv/bin/activate
 
 # Install dependencies if needed
-if ! python3 -c "import flask" 2>/dev/null; then
+if ! python3 -c "import flask" 2>/dev/null || ! python3 -c "import playwright" 2>/dev/null; then
     echo "📦 Installing dependencies..."
     pip install -r requirements.txt
 fi
