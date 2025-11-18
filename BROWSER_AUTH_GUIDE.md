@@ -1,30 +1,90 @@
 # Browser-Based Authentication Guide
 
+## ⚠️ CRITICAL STATUS NOTICE ⚠️
+
+**This browser-based authentication feature is EXPERIMENTAL and NOT CURRENTLY FUNCTIONAL for Ring API authentication.**
+
+### What Works
+- ✅ Opens a browser window to Ring's login page
+- ✅ Allows you to login through Ring's official website  
+- ✅ Captures browser cookies and session data
+- ✅ Monitors for successful authentication redirect
+
+### What Does NOT Work
+- ❌ **Cannot extract OAuth refresh tokens needed for Ring API**
+- ❌ **Cannot authenticate the ring-doorbell library**
+- ❌ **Cannot enable neighborhood post monitoring**
+- ❌ **The monitor will fail to initialize after browser login**
+
+### Why It Doesn't Work
+
+Ring's authentication system does not expose OAuth tokens in ways this implementation can capture:
+
+1. **Browser Storage**: OAuth tokens are NOT stored in localStorage or sessionStorage
+2. **API Interception**: Token endpoints may use different domains or be CORS-protected
+3. **Token Format**: Ring may use proprietary token formats not compatible with ring-doorbell library
+4. **Session Isolation**: Browser sessions don't translate directly to API authentication
+
+### What You Should Use Instead
+
+**✅ FORM-BASED LOGIN (Recommended - Works Reliably)**
+
+Use the traditional form-based login on the login page:
+- Enter your Ring email address
+- Enter your Ring password
+- Include 2FA code if required
+- This method works reliably with the ring-doorbell library
+
+---
+
 ## Overview
 
-Little Finger now supports **secure browser-based authentication** where users login directly through Ring's official website. This method is more secure as your credentials never pass through the Little Finger application.
+This document describes an **experimental** browser-based authentication feature that was intended to allow users to login through Ring's official website. However, it **does not currently work** for Ring API authentication.
 
 ## Authentication Methods
 
-### 🔐 Browser-Based Login (Recommended)
+### ✅ Form-Based Login (WORKS - Use This!)
 
-**Benefits:**
-- ✅ Login directly on Ring's official website
-- ✅ Credentials never pass through Little Finger
-- ✅ Full support for Ring's security features (2FA, CAPTCHA, etc.)
-- ✅ More secure and trusted authentication flow
-- ✅ Session persistence - stays logged in across restarts
+**Status: FULLY FUNCTIONAL**
+
+The traditional form-based login works reliably with Ring's API.
 
 **How It Works:**
-1. Click "Login via Ring Website" on the login page
-2. A browser window opens to Ring's official login page
-3. Login with your Ring credentials directly on Ring's site
-4. Little Finger captures the authentication session after successful login
-5. You're redirected to the monitoring dashboard
+1. Enter your Ring email and password
+2. Include 2FA SMS code if required
+3. Application uses ring-doorbell library to authenticate
+4. Receives OAuth refresh token from Ring's API
+5. Monitoring begins successfully
 
-### 📝 Form-Based Login (Alternative)
+**Benefits:**
+- ✅ Works reliably every time
+- ✅ Full 2FA support via SMS codes
+- ✅ Direct API authentication
+- ✅ No additional dependencies
+- ✅ Session persistence with refresh tokens
 
-The traditional method where you enter credentials in the app is still available as a fallback option.
+### ❌ Browser-Based Login (EXPERIMENTAL - Does Not Work)
+
+**Status: NOT FUNCTIONAL**
+
+This was an attempt to authenticate by capturing tokens from Ring's website.
+
+**What Happens:**
+1. Click "Login via Ring Website" (currently disabled in UI)
+2. Browser window opens to Ring's login page
+3. You login successfully on Ring's website
+4. Application attempts to extract OAuth tokens
+5. ❌ **FAILS** - Cannot find refresh_token
+6. ❌ Monitor initialization fails
+7. ❌ You're left without authentication
+
+**Why It Fails:**
+- Ring's OAuth tokens are not in accessible browser storage
+- API call interception doesn't capture the right endpoints
+- Browser cookies alone are not sufficient for ring-doorbell library
+- Different authentication flow than what the library expects
+
+**Do Not Use This Method** - It will waste your time and not result in successful authentication.
 
 ## Getting Started
 

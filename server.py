@@ -294,8 +294,21 @@ def check_browser_auth_status():
 
 
 async def initialize_monitor_from_browser_auth(auth_data):
-    """Initialize Ring monitor using browser-captured authentication"""
+    """Initialize Ring monitor using browser-captured authentication
+    
+    ⚠️ KNOWN ISSUE: This function is part of an experimental feature that does not
+    currently work with Ring's API. Ring does not expose OAuth tokens in a way that
+    can be captured from browser storage or easily intercepted.
+    
+    This function will typically fail with "Could not extract authentication tokens"
+    because the required refresh_token is not available.
+    """
     global monitor, monitor_thread
+    
+    logger.warning("=" * 70)
+    logger.warning("⚠️ EXPERIMENTAL: Attempting to initialize monitor from browser auth")
+    logger.warning("⚠️ THIS IS KNOWN TO NOT WORK - Ring API tokens cannot be extracted")
+    logger.warning("=" * 70)
     
     config = load_config()
     if not config:
@@ -304,21 +317,40 @@ async def initialize_monitor_from_browser_auth(auth_data):
     # Try to extract refresh token from auth data
     refresh_token = None
     
+    logger.info("Checking for refresh token in intercepted API calls...")
     if auth_data.get('intercepted_tokens'):
-        for token_data in auth_data['intercepted_tokens']:
+        logger.info(f"Found {len(auth_data['intercepted_tokens'])} intercepted token responses")
+        for i, token_data in enumerate(auth_data['intercepted_tokens']):
             if isinstance(token_data, dict) and 'refresh_token' in token_data:
                 refresh_token = token_data['refresh_token']
-                logger.info("Found refresh token in intercepted API calls")
+                logger.info(f"✓ Found refresh token in intercepted API call #{i}")
                 break
+        if not refresh_token:
+            logger.warning("❌ No refresh_token found in any intercepted API calls")
+    else:
+        logger.warning("❌ No intercepted_tokens in auth data")
     
-    if auth_data.get('tokens'):
-        for key, value in auth_data['tokens'].items():
-            if isinstance(value, dict) and 'refresh_token' in value:
-                refresh_token = value['refresh_token']
-                logger.info(f"Found refresh token in browser storage: {key}")
-                break
+    if not refresh_token:
+        logger.info("Checking for refresh token in browser storage...")
+        if auth_data.get('tokens'):
+            logger.info(f"Found {len(auth_data['tokens'])} token-related storage keys")
+            for key, value in auth_data['tokens'].items():
+                logger.info(f"  - Checking key: {key}")
+                if isinstance(value, dict) and 'refresh_token' in value:
+                    refresh_token = value['refresh_token']
+                    logger.info(f"✓ Found refresh token in browser storage key: {key}")
+                    break
+            if not refresh_token:
+                logger.warning("❌ No refresh_token found in any browser storage keys")
+        else:
+            logger.warning("❌ No tokens dictionary in auth data")
     
     if refresh_token:
+        logger.info("=" * 70)
+        logger.info("✓ UNEXPECTED SUCCESS: Found a refresh token!")
+        logger.info("  Attempting to initialize Ring monitor...")
+        logger.info("=" * 70)
+        
         # Use the captured refresh token
         config['ring']['refresh_token'] = refresh_token
         config['ring']['username'] = ''
@@ -331,17 +363,31 @@ async def initialize_monitor_from_browser_auth(auth_data):
             auth_result = monitor.authenticate()
             
             if auth_result:
-                logger.info("Monitor initialized successfully with browser-captured tokens")
+                logger.info("✓✓✓ SUCCESS! Monitor initialized with browser-captured tokens!")
+                logger.info("✓✓✓ Browser authentication is now working!")
                 
                 # Start monitoring if not already running
                 if not monitor_thread or not monitor_thread.is_alive():
                     monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
                     monitor_thread.start()
             else:
+                logger.error("❌ Failed to authenticate monitor with captured tokens")
                 raise RuntimeError("Failed to authenticate monitor with captured tokens")
     else:
-        logger.warning("No refresh token found in browser auth data")
-        raise RuntimeError("Could not extract authentication tokens from browser session")
+        logger.error("=" * 70)
+        logger.error("❌ EXPECTED FAILURE: No refresh token found in browser auth data")
+        logger.error("❌ This is the known limitation of the browser auth feature")
+        logger.error("=" * 70)
+        logger.error("Ring does not expose OAuth tokens in browser storage or easily")
+        logger.error("interceptable API calls. To authenticate with Ring:")
+        logger.error("")
+        logger.error("1. Use the FORM-BASED LOGIN on the login page")
+        logger.error("2. Enter your Ring email and password directly")
+        logger.error("3. Include 2FA code if required")
+        logger.error("")
+        logger.error("Browser authentication is experimental and NOT FUNCTIONAL.")
+        logger.error("=" * 70)
+        raise RuntimeError("Could not extract authentication tokens from browser session. Use form-based login instead.")
 
 
 @app.route('/')

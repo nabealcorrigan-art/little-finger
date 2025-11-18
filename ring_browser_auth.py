@@ -105,11 +105,19 @@ class RingBrowserAuth:
         """
         Extract OAuth tokens from browser storage
         
+        ⚠️ KNOWN ISSUE: Ring's OAuth tokens are not accessible via browser storage.
+        This method is provided for experimentation but is not expected to work
+        with Ring's current implementation.
+        
         Returns:
             Dictionary with access_token, refresh_token, etc. if available
         """
         if not self.page:
             return None
+            
+        logger.warning("⚠️ Attempting to extract OAuth tokens from browser storage...")
+        logger.warning("⚠️ NOTE: This is known to NOT WORK with Ring's current implementation!")
+        logger.warning("⚠️ Ring does not store OAuth tokens in accessible browser storage.")
             
         try:
             # Try to extract tokens from localStorage
@@ -122,7 +130,7 @@ class RingBrowserAuth:
                 return storage;
             }""")
             
-            logger.info(f"LocalStorage keys: {list(local_storage.keys())}")
+            logger.info(f"LocalStorage keys found: {list(local_storage.keys())}")
             
             # Look for OAuth-related keys
             token_data = {}
@@ -132,12 +140,17 @@ class RingBrowserAuth:
                         # Try to parse as JSON
                         parsed = json.loads(value)
                         token_data[key] = parsed
+                        logger.info(f"Found token-like data in key '{key}': {type(parsed)}")
                     except:
                         token_data[key] = value
+                        logger.info(f"Found token-like data in key '{key}': string value")
             
             if token_data:
-                logger.info(f"Found token-related data: {list(token_data.keys())}")
+                logger.info(f"Found {len(token_data)} token-related keys: {list(token_data.keys())}")
+                logger.warning("⚠️ However, these are unlikely to contain Ring API OAuth tokens!")
                 return token_data
+            else:
+                logger.warning("❌ No token-related data found in localStorage")
                 
         except Exception as e:
             logger.warning(f"Could not extract OAuth tokens from localStorage: {e}")
@@ -153,16 +166,24 @@ class RingBrowserAuth:
                 return storage;
             }""")
             
-            logger.info(f"SessionStorage keys: {list(session_storage.keys())}")
+            logger.info(f"SessionStorage keys found: {list(session_storage.keys())}")
+            if not session_storage:
+                logger.warning("❌ SessionStorage is empty")
             
         except Exception as e:
             logger.warning(f"Could not extract from sessionStorage: {e}")
         
+        logger.error("❌ FAILED: Could not extract Ring OAuth tokens from browser storage")
+        logger.error("❌ This is expected - Ring does not expose API tokens in browser storage")
         return None
     
     async def intercept_api_calls(self, callback):
         """
         Intercept API calls to capture OAuth tokens
+        
+        ⚠️ KNOWN ISSUE: This interception method may not capture Ring's OAuth
+        token endpoints as they may use different domains, headers, or be
+        inaccessible due to CORS or security policies.
         
         Args:
             callback: Function to call with intercepted request/response data
@@ -170,22 +191,46 @@ class RingBrowserAuth:
         if not self.page:
             raise RuntimeError("Browser not started. Call start_browser() first.")
         
+        logger.warning("⚠️ Setting up API call interception (experimental)...")
+        logger.warning("⚠️ NOTE: This may not capture Ring's OAuth token endpoints!")
+        
+        intercepted_count = [0]  # Use list to allow modification in nested function
+        
         async def handle_response(response):
             """Handle network responses"""
             url = response.url
             
             # Look for OAuth token endpoint
-            if "oauth" in url or "token" in url:
+            if any(keyword in url.lower() for keyword in ["oauth", "token", "auth", "api"]):
+                intercepted_count[0] += 1
+                logger.info(f"🔍 Intercepted API call #{intercepted_count[0]}: {url}")
                 try:
                     if response.status == 200:
-                        data = await response.json()
-                        logger.info(f"Intercepted OAuth response from: {url}")
-                        await callback(data)
+                        content_type = response.headers.get('content-type', '')
+                        if 'json' in content_type:
+                            data = await response.json()
+                            logger.info(f"📥 Response data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+                            
+                            # Check if this contains OAuth tokens
+                            if isinstance(data, dict):
+                                has_refresh = 'refresh_token' in data
+                                has_access = 'access_token' in data
+                                if has_refresh or has_access:
+                                    logger.info(f"🎯 FOUND TOKENS! refresh_token: {has_refresh}, access_token: {has_access}")
+                                else:
+                                    logger.info(f"⚠️ Response contains: {list(data.keys())[:5]} (no OAuth tokens)")
+                            
+                            await callback(data)
+                        else:
+                            logger.debug(f"⚠️ Non-JSON response: {content_type}")
+                    else:
+                        logger.debug(f"⚠️ Non-200 status: {response.status}")
                 except Exception as e:
                     logger.debug(f"Could not parse response from {url}: {e}")
         
         self.page.on("response", handle_response)
-        logger.info("API interception enabled")
+        logger.info("✓ API interception enabled - monitoring all network requests")
+        logger.info("  Looking for: oauth, token, auth, api in URLs")
     
     async def get_cookies_as_dict(self) -> Dict[str, str]:
         """Get cookies as a simple key-value dictionary"""
