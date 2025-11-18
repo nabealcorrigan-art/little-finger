@@ -68,19 +68,48 @@ pip install -r requirements.txt
 
 ### Authentication
 
-The application uses a **web-based login interface** instead of hardcoded credentials:
+The application supports **two authentication methods**:
+
+#### 🔐 Browser-Based Login (Recommended)
+
+The most secure method - login directly through Ring's official website:
 
 1. Start the server (see Usage below)
 2. Open your browser and navigate to `http://localhost:5777`
-3. You'll be automatically redirected to the login page
-4. Enter your Ring email address and password
-5. If your account has 2FA enabled, you'll be prompted to enter the 6-digit OTP code
-6. After successful authentication, you'll be redirected to the monitoring dashboard
+3. Click **"Login via Ring Website"** button
+4. A browser window opens to Ring's official login page
+5. Login with your Ring credentials on Ring's website
+6. Complete any 2FA verification if enabled
+7. You'll be automatically redirected to the monitoring dashboard
+
+**Benefits:**
+- ✅ Most secure - credentials never pass through the app
+- ✅ Full support for Ring's 2FA and security features
+- ✅ Login directly on Ring's trusted website
+- ✅ Session persistence across restarts
+
+**Setup:**
+```bash
+# Install browser automation
+playwright install chromium
+```
+
+For detailed browser authentication setup and troubleshooting, see [BROWSER_AUTH_GUIDE.md](BROWSER_AUTH_GUIDE.md).
+
+#### 📝 Form-Based Login (Alternative)
+
+Traditional method where you enter credentials in the app:
+
+1. Start the server (see Usage below)
+2. Open your browser and navigate to `http://localhost:5777`
+3. Enter your Ring email address and password in the form
+4. If your account has 2FA enabled, enter the 6-digit OTP code
+5. After successful authentication, you'll be redirected to the monitoring dashboard
 
 **Security Features**:
 - Credentials are never stored in files
 - Session-based authentication
-- Refresh tokens are stored in memory only
+- Refresh tokens are stored securely
 - Logout functionality to clear your session
 
 ## Usage
@@ -146,10 +175,15 @@ The server will start on `http://0.0.0.0:5777` by default.
 
 ## API Endpoints
 
-- `GET /`: Dashboard interface (requires authentication)
-- `GET /login`: Login page
-- `POST /login`: Authentication endpoint (accepts JSON with username, password, otp_code)
+### Authentication
+- `GET /login`: Login page with browser and form-based authentication options
+- `POST /login`: Form-based authentication endpoint (accepts JSON with username, password, otp_code)
+- `POST /auth/browser/start`: Start browser-based authentication (opens Ring's login page)
+- `GET /auth/browser/status`: Check browser authentication status
 - `GET /logout`: Logout and clear session
+
+### Application
+- `GET /`: Dashboard interface (requires authentication)
 - `GET /api/matches`: Get all detected matches
 - `GET /api/matches/filter?term=<term>`: Filter matches by keyword or emoji
 - `GET /api/stats`: Get monitoring statistics
@@ -159,8 +193,9 @@ The server will start on `http://0.0.0.0:5777` by default.
 ## Dashboard Features
 
 ### Authentication
-- **Web-Based Login**: Secure login page for entering credentials
-- **2FA Support**: Automatic OTP field when two-factor authentication is required
+- **Browser-Based Login (Recommended)**: Login directly through Ring's official website
+- **Form-Based Login**: Traditional login form for entering credentials
+- **2FA Support**: Full support for Ring's two-factor authentication
 - **Session Management**: Stay logged in across browser sessions
 - **Logout**: Clear session and return to login page
 

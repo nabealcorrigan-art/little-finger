@@ -38,6 +38,7 @@ data/
 
 # Config with credentials
 config.local.json
+ring_auth_state.json
 
 # Logs
 *.log
