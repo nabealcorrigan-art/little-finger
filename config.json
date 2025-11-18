@@ -1,7 +1,7 @@
 {
   "ring": {
-    "username": "",
-    "password": "",
+    "username": "test@example.com",
+    "password": "testpassword",
     "refresh_token": "",
     "otp_code": ""
   },
@@ -15,10 +15,10 @@
       "police"
     ],
     "emojis": [
-      "🚨",
-      "🚔",
-      "⚠️",
-      "🔴"
+      "\ud83d\udea8",
+      "\ud83d\ude94",
+      "\u26a0\ufe0f",
+      "\ud83d\udd34"
     ]
   },
   "server": {
