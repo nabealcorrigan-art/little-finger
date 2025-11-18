@@ -79,29 +79,73 @@ def is_authenticated():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Handle login page and authentication"""
+    """Handle login page and Ring authentication via ring-doorbell library.
+    
+    This endpoint implements the complete Ring authentication flow:
+    
+    GET /login:
+        - Displays the login form with fields for email, password, and OTP
+        - If user is already authenticated, redirects to dashboard
+    
+    POST /login:
+        - Accepts JSON payload with username, password, and optional otp_code
+        - Uses ring-doorbell library to authenticate with Ring's API
+        - Handles the 2FA flow if the Ring account has SMS verification enabled
+        
+    Ring Authentication Flow via ring-doorbell:
+    -------------------------------------------
+    1. User submits email + password
+    2. ring-doorbell attempts authentication via Ring's OAuth API
+    3. Three possible outcomes:
+       a) Success: Account has no 2FA, authentication complete
+       b) 2FA Required: Ring requires SMS verification code
+       c) Failure: Invalid credentials or Ring API error
+    
+    2FA Flow:
+    ---------
+    If 2FA is enabled on the Ring account:
+    1. Initial auth attempt (email+password only) fails with 2FA error
+    2. Server returns requires_otp=True response
+    3. Client prompts user to enter 6-digit SMS code
+    4. User submits email + password + OTP code
+    5. ring-doorbell re-authenticates with OTP included
+    6. Success: OAuth tokens obtained, user is authenticated
+    
+    Error Handling:
+    ---------------
+    The implementation provides specific feedback for different failure types:
+    - Missing credentials: 400 error with validation message
+    - 2FA required: 200 response with requires_otp flag and instructions
+    - Invalid credentials/OTP: 401 error with credential check message
+    - Ring API errors: 500 error with specific error details
+    - Network/server errors: 500 error with error message
+    """
     if request.method == 'GET':
-        # If already authenticated, redirect to dashboard
+        # Serve the login page
+        # If already authenticated, redirect to dashboard to prevent re-login
         if is_authenticated():
             return redirect(url_for('index'))
         return render_template('login.html')
     
-    # Handle POST request (authentication attempt)
+    # Handle POST request (authentication attempt with ring-doorbell library)
     try:
+        # Parse credentials from JSON request body
         data = request.get_json()
         username = data.get('username', '').strip()
         password = data.get('password', '')
         otp_code = data.get('otp_code', '').strip()
         
+        # Validate required fields
         if not username or not password:
             return jsonify({
                 'success': False,
-                'message': 'Username and password are required'
+                'error_type': 'validation',
+                'message': 'Ring email address and password are required'
             }), 400
         
         global monitor, monitor_thread, pending_credentials
         
-        # Store credentials for authentication
+        # Store credentials temporarily for potential retry with OTP
         with auth_lock:
             pending_credentials = {
                 'username': username,
@@ -109,68 +153,120 @@ def login():
                 'otp_code': otp_code
             }
         
-        # Create a temporary config with credentials
+        # Load monitoring configuration (keywords, poll interval, etc.)
         config = load_config()
         if not config:
             return jsonify({
                 'success': False,
-                'message': 'Server configuration error'
+                'error_type': 'server',
+                'message': 'Server configuration error. Please contact administrator.'
             }), 500
         
-        # Override ring config with provided credentials
+        # Set Ring authentication credentials in config
+        # ring-doorbell library will use these to authenticate with Ring's API
         config['ring']['username'] = username
         config['ring']['password'] = password
         config['ring']['otp_code'] = otp_code
-        config['ring']['refresh_token'] = ''  # Clear any existing token
+        config['ring']['refresh_token'] = ''  # Clear any existing token to force fresh auth
         
-        # Try to authenticate
+        # Initialize Ring monitor with credentials
+        # This creates an instance but doesn't authenticate yet
         temp_monitor = RingMonitor(config)
+        
+        # Attempt authentication via ring-doorbell library
+        # This calls Ring's OAuth API to exchange credentials for tokens
         auth_result = temp_monitor.authenticate()
         
+        # Handle authentication result
         if auth_result == 'requires_otp' and not otp_code:
-            # OTP is required but not provided
+            # CASE 1: 2FA is enabled but user hasn't provided OTP code yet
+            # Ring has sent an SMS with 6-digit code to the user's phone
+            # Return special response to trigger OTP input in UI
+            logger.info(f"2FA required for user {username}, waiting for OTP code")
             return jsonify({
                 'success': False,
                 'requires_otp': True,
-                'message': 'Two-factor authentication code required'
+                'error_type': '2fa_required',
+                'message': 'Two-factor authentication is enabled on your Ring account. Please enter the 6-digit verification code sent to your phone via SMS.'
             }), 200
+            
         elif auth_result == True:
-            # Authentication successful
+            # CASE 2: Authentication successful!
+            # ring-doorbell has obtained OAuth tokens from Ring's API
+            # User is now authenticated and can access Ring data
+            
+            # Create authenticated session
             session['authenticated'] = True
             session['username'] = username
-            session.permanent = True
+            session.permanent = True  # Keep session across browser restarts
             
-            # Store the refresh token in session if available
+            # Store refresh token in session for persistent authentication
+            # This allows re-authentication without credentials on next login
             if temp_monitor.config['ring'].get('refresh_token'):
                 session['refresh_token'] = temp_monitor.config['ring']['refresh_token']
             
-            # Update global monitor with authenticated instance
+            # Update global monitor instance with authenticated session
             with auth_lock:
                 monitor = temp_monitor
-                pending_credentials = None
+                pending_credentials = None  # Clear stored credentials
             
-            # Start monitoring if not already running
+            # Start background monitoring thread if not already running
+            # This begins polling Ring API for neighborhood posts
             if not monitor_thread or not monitor_thread.is_alive():
                 monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
                 monitor_thread.start()
             
-            logger.info(f"User {username} authenticated successfully")
+            logger.info(f"User {username} authenticated successfully with Ring")
             return jsonify({
                 'success': True,
-                'message': 'Authentication successful'
+                'message': 'Successfully authenticated with Ring. Redirecting to dashboard...'
             }), 200
+            
         else:
-            # Authentication failed
+            # CASE 3: Authentication failed
+            # Could be: wrong password, invalid OTP, expired OTP, Ring API error, etc.
+            # Provide detailed feedback to help user troubleshoot
+            
+            error_message = 'Authentication with Ring failed. '
+            
+            if otp_code:
+                # User provided OTP but auth still failed
+                # Most likely: wrong OTP, expired OTP, or credential issue
+                error_message += 'Please check your email, password, and verification code. The SMS code may have expired - request a new one by logging in again.'
+                error_type = 'invalid_otp'
+                logger.warning(f"Authentication failed for {username} with OTP code")
+            else:
+                # No OTP provided, likely credential error
+                error_message += 'Please verify your Ring email address and password are correct.'
+                error_type = 'invalid_credentials'
+                logger.warning(f"Authentication failed for {username}: invalid credentials")
+            
             return jsonify({
                 'success': False,
-                'message': 'Authentication failed. Please check your credentials.'
+                'error_type': error_type,
+                'message': error_message
             }), 401
             
     except Exception as e:
-        logger.error(f"Login error: {e}")
+        # Catch unexpected errors (network issues, Ring API changes, etc.)
+        error_str = str(e)
+        logger.error(f"Login error for {username if 'username' in locals() else 'unknown'}: {error_str}")
+        
+        # Try to provide helpful error message based on exception
+        error_type = 'server'
+        if 'network' in error_str.lower() or 'connection' in error_str.lower():
+            error_message = 'Network error connecting to Ring. Please check your internet connection and try again.'
+            error_type = 'network'
+        elif 'timeout' in error_str.lower():
+            error_message = 'Connection to Ring timed out. Please try again.'
+            error_type = 'timeout'
+        else:
+            error_message = f'An error occurred during authentication: {error_str}'
+        
         return jsonify({
             'success': False,
-            'message': str(e)
+            'error_type': error_type,
+            'message': error_message
         }), 500
 
 
