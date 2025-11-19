@@ -68,51 +68,94 @@ pip install -r requirements.txt
 
 ### Authentication
 
-> **⚠️ BROWSER LOGIN STATUS**: The browser-based authentication feature is experimental and **does not currently work**. See [BROWSER_AUTH_STATUS.md](BROWSER_AUTH_STATUS.md) for technical details. **Please use form-based login** which works reliably.
+This application uses the **`ring-doorbell` Python library** to authenticate with Ring's API. This is the standard, reliable method used by the Ring developer community.
 
-The application supports **two authentication methods**:
+> **⚠️ BROWSER LOGIN STATUS**: The browser-based authentication feature is experimental and **does not currently work** because it cannot extract the OAuth tokens required by the ring-doorbell library. See [BROWSER_AUTH_STATUS.md](BROWSER_AUTH_STATUS.md) for technical details. **Please use form-based login** which reliably authenticates through ring-doorbell.
 
-#### 📝 Form-Based Login (Recommended - Works Reliably)
+#### 📝 Form-Based Login via ring-doorbell (Recommended - Reliable Method)
 
-Traditional method where you enter credentials in the app:
+The form-based login uses the proven **ring-doorbell Python library** to authenticate directly with Ring's OAuth API. This is the standard authentication method and works reliably.
 
-1. Start the server (see Usage below)
-2. Open your browser and navigate to `http://localhost:5777`
-3. Enter your Ring email address and password in the form
-4. If your account has 2FA enabled, enter the 6-digit OTP code sent via SMS
-5. After successful authentication, you'll be redirected to the monitoring dashboard
+**How it works:**
 
-**Security Features**:
-- Credentials are only used to authenticate with Ring's API via the ring-doorbell library
-- Session-based authentication with secure session keys
-- Refresh tokens are stored securely in memory
-- Logout functionality to clear your session
+1. **Start the server** (see Usage section below)
+2. **Navigate to login page**: Open `http://localhost:5777` in your browser
+3. **Enter Ring credentials**:
+   - Ring account email address (not username)
+   - Ring account password
+4. **Handle 2FA if enabled** (see 2FA section below)
+5. **Authentication complete**: Redirected to monitoring dashboard
 
-**⚠️ Important:** This is the **only authentication method that currently works reliably** with the Ring API.
+**What happens behind the scenes:**
 
-#### 🔐 Browser-Based Login (Experimental - Not Fully Functional)
+- The `ring-doorbell` library exchanges your credentials with Ring's OAuth API
+- Ring returns OAuth access and refresh tokens
+- These tokens are used for all subsequent API calls
+- Tokens are automatically refreshed when they expire
+- Your credentials are NOT stored - only OAuth tokens are kept in session
+
+**Security features:**
+
+- ✅ Industry-standard OAuth 2.0 authentication via ring-doorbell library
+- ✅ Credentials only transmitted once to Ring's API (not stored locally)
+- ✅ Session-based authentication with secure random session keys
+- ✅ Refresh tokens stored only in memory (session), not persisted to disk
+- ✅ Automatic token refresh by ring-doorbell when tokens expire
+- ✅ Logout functionality to clear session and tokens
+
+#### 🔐 Two-Factor Authentication (2FA / SMS Verification)
+
+If your Ring account has two-factor authentication enabled (SMS verification), the login process involves an additional step:
+
+**2FA Login Flow:**
+
+1. **Initial login attempt**: Enter email and password, leave OTP field blank
+2. **Ring sends SMS**: If 2FA is enabled, Ring texts a 6-digit code to your phone
+3. **Prompt for OTP**: The UI displays a message asking for the verification code
+4. **Enter OTP code**: Input the 6-digit code from the SMS in the OTP field
+5. **Submit again**: Click login with all three fields filled (email, password, OTP)
+6. **Authentication complete**: The ring-doorbell library validates the OTP with Ring
+
+**2FA Technical Details:**
+
+- Ring's 2FA uses SMS-based one-time passwords (OTP)
+- OTP codes are 6 digits and expire after a few minutes
+- The ring-doorbell library handles 2FA through its `fetch_token()` method
+- First auth attempt without OTP will fail if 2FA is enabled
+- Second auth attempt with OTP completes the authentication
+- After successful 2FA login, the refresh token can be used for future logins
+
+**2FA Tips:**
+
+- You can enter the OTP code upfront if you know 2FA is enabled
+- If the code expires, simply request a new login to get a fresh SMS
+- OTP codes are single-use - each login attempt needs a fresh code if it fails
+- Keep your phone nearby during first login if 2FA is enabled
+
+#### 🌐 Browser-Based Login (Experimental - Not Functional)
 
 **⚠️ STATUS: This feature is EXPERIMENTAL and does NOT currently work for Ring API authentication.**
 
-While the browser automation successfully opens Ring's website and allows you to login, it **cannot currently extract the OAuth tokens** needed to authenticate with Ring's API. This is because:
+The browser automation approach cannot extract the OAuth tokens that the ring-doorbell library requires. While it successfully opens Ring's website and allows you to login, the authentication tokens are not accessible through browser storage or interception.
 
-- Ring's OAuth tokens are not stored in accessible browser storage (localStorage/sessionStorage)
-- The Ring website uses a different authentication flow than what the ring-doorbell library expects
-- API endpoint interception has not been successfully implemented to capture the refresh tokens
+**Why it doesn't work:**
 
-**What it does:**
-- Opens a browser window to Ring's login page
-- Allows you to login through Ring's official website
-- Captures cookies and browser session data
+- Ring's OAuth tokens are not stored in browser localStorage or sessionStorage
+- The Ring website uses an authentication flow incompatible with token extraction
+- API request interception has not successfully captured the refresh tokens
+- The ring-doorbell library requires specific OAuth tokens that browser auth cannot provide
 
-**What it CANNOT do (currently):**
-- Extract the OAuth refresh token needed for the ring-doorbell library
-- Successfully authenticate the Ring monitor
-- Enable neighborhood post monitoring
+**Current status:**
 
-**If you want to help fix this:** The implementation needs work in `ring_browser_auth.py` to properly intercept Ring's OAuth token API calls or extract tokens from the authenticated browser session. Contributions welcome!
+- ❌ Cannot extract OAuth refresh tokens needed by ring-doorbell
+- ❌ Cannot initialize authenticated Ring API session
+- ❌ Cannot enable neighborhood post monitoring
+- ✅ Successfully opens browser and navigates to Ring login
+- ✅ Allows user to complete login on Ring's website
 
-For now, **please use the Form-Based Login method** which works reliably.
+**For developers**: If you want to help fix this, the implementation in `ring_browser_auth.py` needs work to intercept Ring's OAuth token API calls or extract tokens from the authenticated browser session. Contributions welcome!
+
+**For users**: Please use the **form-based login method** which reliably authenticates through the ring-doorbell library.
 
 ## Usage
 
@@ -277,29 +320,224 @@ Access the web interface from any browser on your network.
 
 ## Troubleshooting
 
+### Authentication Issues
+
+This section covers common authentication problems and their solutions when using the ring-doorbell library to connect to Ring's API.
+
+#### Wrong Email or Password
+
+**Symptoms:**
+- Error message: "Authentication failed. Please check your credentials."
+- Error type: `invalid_credentials`
+- Cannot login even without 2FA
+
+**Solutions:**
+1. **Verify email format**: Ring requires your account email address, not a username
+   - ✅ Correct: `user@example.com`
+   - ❌ Wrong: `myusername` or `MyRingAccount`
+
+2. **Check password carefully**: Passwords are case-sensitive
+   - Try copying and pasting to avoid typos
+   - Ensure no extra spaces before or after
+
+3. **Test on Ring's website**: Visit https://account.ring.com and verify you can login there
+   - If you can't login on Ring's website, reset your password there first
+   - Once Ring website login works, the app will work too
+
+4. **Check account status**: Ensure your Ring account is active and not suspended
+
+#### 2FA / OTP Issues
+
+**Symptoms:**
+- Message: "Two-factor authentication code required"
+- Login fails even after entering OTP code
+- Error: "Invalid verification code"
+
+**Common Problems and Solutions:**
+
+**Problem 1: OTP Code Expired**
+- SMS codes typically expire after 5-10 minutes
+- **Solution**: Request a new code by attempting login again (leave OTP field blank initially)
+- Ring will send a fresh SMS code
+
+**Problem 2: Wrong OTP Code**
+- Typo in the 6-digit code
+- Using an old code from a previous attempt
+- **Solution**: 
+  - Double-check the most recent SMS from Ring
+  - Enter exactly 6 digits with no spaces or dashes
+  - Don't use codes from previous login attempts
+
+**Problem 3: SMS Not Arriving**
+- SMS delivery can be delayed or fail
+- **Solutions**:
+  - Wait 1-2 minutes for SMS to arrive
+  - Check if phone has signal
+  - Verify phone number is correct in Ring account settings
+  - Try requesting another code (attempt login again)
+
+**Problem 4: 2FA Disabled on Ring Account**
+- You're entering an OTP code but 2FA isn't actually enabled
+- **Solution**: 
+  - Leave OTP field blank on first attempt
+  - Only fill it in if the UI prompts you for it
+  - Check Ring account settings to see if 2FA is enabled
+
+**Problem 5: Wrong Phone Number in Ring Account**
+- SMS codes going to old/wrong phone number
+- **Solution**:
+  - Login to Ring's website at https://account.ring.com
+  - Update phone number in account settings
+  - Disable and re-enable 2FA with correct number
+
+**2FA Best Practices:**
+- ✅ Keep your phone nearby during first login
+- ✅ Leave OTP blank initially, fill it only when prompted
+- ✅ Use fresh codes - each login needs a new SMS
+- ✅ Wait for SMS before retrying
+- ❌ Don't reuse old OTP codes
+- ❌ Don't spam login attempts (may temporarily lock account)
+
+#### Network and Connection Issues
+
+**Symptoms:**
+- "Network error connecting to Ring"
+- "Connection to Ring timed out"
+- "Connection error. Please try again."
+
+**Solutions:**
+
+1. **Check Internet Connection**:
+   ```bash
+   # Test connectivity to Ring's servers
+   ping api.ring.com
+   ```
+
+2. **Firewall/Proxy Issues**:
+   - Ensure outbound HTTPS (port 443) is allowed
+   - Ring API uses `https://api.ring.com` and `https://oauth.ring.com`
+   - If behind corporate firewall, may need to whitelist these domains
+
+3. **Server/App Issues**:
+   - Check if Flask server is running: `ps aux | grep python`
+   - Check server logs: Look for error messages in terminal
+   - Restart the application: `Ctrl+C` then `python server.py`
+
+4. **Ring API Status**:
+   - Ring's API may be temporarily down (rare)
+   - Check Ring's status page or community forums
+   - Wait and try again later
+
+#### Session and Cookie Issues
+
+**Symptoms:**
+- "Session Expired" message
+- Redirected to login page unexpectedly
+- "Not authenticated" errors
+
+**Solutions:**
+
+1. **Session Timeout**:
+   - Sessions expire after period of inactivity
+   - **Solution**: Simply login again - it's quick with 2FA already done once
+
+2. **Browser Cookies Disabled**:
+   - App requires cookies for session management
+   - **Solution**: Enable cookies in browser settings
+
+3. **Multiple Tabs/Windows**:
+   - Logging out in one tab affects all tabs
+   - **Solution**: Refresh other tabs to re-authenticate
+
+4. **Server Restart**:
+   - Session data is lost when server restarts
+   - **Solution**: Login again after server restarts
+
+#### Ring API / ring-doorbell Library Issues
+
+**Symptoms:**
+- Authentication works but features don't load
+- "Ring API not available" messages
+- Neighborhood data not appearing
+
+**Solutions:**
+
+1. **ring-doorbell Library Not Installed**:
+   ```bash
+   pip install ring-doorbell==0.8.8
+   ```
+
+2. **Incompatible Library Version**:
+   - Ring may update their API, breaking older library versions
+   - **Solution**: Update ring-doorbell library
+   ```bash
+   pip install --upgrade ring-doorbell
+   ```
+   - Check project requirements.txt for compatible version
+
+3. **Neighborhood Posts Not Supported**:
+   - ring-doorbell library may not support neighborhood features for all accounts
+   - Ring's unofficial API has limitations
+   - **Solution**: See [RING_API_DETAILS.md](RING_API_DETAILS.md) for alternatives
+   - Use mock mode for development/testing
+
+4. **Ring API Changes**:
+   - Ring may change their API without notice (unofficial API)
+   - **Solution**: 
+     - Check for ring-doorbell library updates
+     - Report issues on GitHub
+     - See if others have similar problems in ring-doorbell issues
+
+#### Browser Login Issues (Experimental Feature)
+
+**Important**: Browser-based login is **experimental and not functional**. It cannot extract OAuth tokens needed by ring-doorbell.
+
+**If you're trying to use browser login:**
+- ❌ It will NOT work for authenticating with Ring's API
+- ❌ Cannot extract tokens even if browser login succeeds
+- ✅ Use form-based login instead - it's reliable
+
+**Why browser login doesn't work:**
+- Ring's OAuth tokens aren't in browser storage
+- Token interception hasn't been successfully implemented
+- The ring-doorbell library requires API-level tokens
+
+**Solution**: Always use the form-based login with ring-doorbell library.
+
+#### Getting Help
+
+If you've tried all troubleshooting steps and still can't login:
+
+1. **Check server logs**: Look for detailed error messages in terminal output
+2. **Check Ring account**: Verify you can login at https://account.ring.com
+3. **Test ring-doorbell directly**: Try the library independently to isolate the issue
+4. **Check GitHub issues**: Search for similar problems in this repo and ring-doorbell repo
+5. **Report the issue**: Open a GitHub issue with:
+   - Exact error message
+   - Steps to reproduce
+   - Server logs (remove sensitive info)
+   - ring-doorbell library version: `pip show ring-doorbell`
+
 ### Ring API Connection
+
 - **Neighborhood Access**: The `ring-doorbell` library may not support neighborhood posts for all accounts
 - **API Limitations**: Ring's unofficial API can change without notice
 - **Testing**: Use mock mode and demo data generator for development
 - **See**: [RING_API_DETAILS.md](RING_API_DETAILS.md) for detailed information about Ring API access
 
-### Authentication Issues
-- **Login Page Not Loading**: Ensure the server is running and accessible
-- **Invalid Credentials**: Verify your Ring email and password are correct
-- **2FA Required**: The OTP field will appear automatically when needed - enter the 6-digit code sent via SMS
-- **Session Expired**: Simply reload the page and login again
-- **Connection Failed**: Check network connectivity and server logs
-
 ### No Matches Appearing
+
 - Verify keywords/emojis are configured correctly in `config.json`
 - Check the poll interval isn't too long
 - Ensure Ring neighborhood posts are available in your area
 - Check logs for any API errors
 
 ### Map Not Loading
+
 - Ensure internet connection for loading Leaflet.js CDN resources
 - Check browser console for JavaScript errors
 - Verify WebSocket connection is established (green indicator)
+
 
 ## License
 

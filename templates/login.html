@@ -234,28 +234,29 @@
         
         <!-- Warning about browser auth not working -->
         <div class="alert alert-warning" style="margin-bottom: 20px;">
-            <strong>⚠️ Important Notice:</strong> The browser-based login feature is <strong>experimental and not currently functional</strong> for Ring API authentication. It opens Ring's website but cannot extract the OAuth tokens needed. Please use the form-based login below.
+            <strong>⚠️ Authentication Notice:</strong> This application uses the <strong>ring-doorbell Python library</strong> for reliable Ring API authentication. The form-based login below works consistently. The browser login is experimental and currently non-functional - it cannot extract the OAuth tokens needed by ring-doorbell.
         </div>
         
         <!-- Browser-based login (EXPERIMENTAL - NOT WORKING) -->
         <div class="info-box" id="browserAuthBox" style="opacity: 0.6;">
             <p><strong>🌐 Browser Login (EXPERIMENTAL - NOT FUNCTIONAL)</strong></p>
-            <p>This feature opens Ring's website but cannot currently extract authentication tokens. Use form login below instead.</p>
+            <p><strong>Why it doesn't work:</strong> Ring's OAuth tokens are not accessible via browser automation. The ring-doorbell library requires API-level authentication.</p>
+            <p><strong>Recommended:</strong> Use the form-based login below which authenticates through ring-doorbell's proven API integration.</p>
         </div>
         
         <button type="button" class="btn-browser-auth" id="browserAuthButton" disabled style="opacity: 0.5; cursor: not-allowed;">
             <span>🔐</span>
-            <span id="browserButtonText">Browser Login (Not Working - Use Form Below)</span>
+            <span id="browserButtonText">Browser Login (Experimental - Use ring-doorbell Form Below)</span>
         </button>
         
         <div class="divider">
-            <span>WORKING LOGIN METHOD BELOW</span>
+            <span>RELIABLE METHOD: ring-doorbell Library</span>
         </div>
         
-        <!-- Traditional form-based login (THIS WORKS!) -->
+        <!-- Traditional form-based login (THIS WORKS - uses ring-doorbell library!) -->
         <div class="info-box" style="border-left-color: #4CAF50; background: #1a2a1a;">
-            <p><strong>✅ Recommended: Form-Based Login (WORKS RELIABLY)</strong></p>
-            <p>Enter your Ring credentials below to authenticate with Ring's API.</p>
+            <p><strong>✅ Recommended: Form-Based Login via ring-doorbell</strong></p>
+            <p>Enter your Ring credentials below. This uses the proven <strong>ring-doorbell Python library</strong> to authenticate directly with Ring's OAuth API.</p>
         </div>
         <form id="loginForm">
             <div class="form-group">
@@ -269,9 +270,13 @@
             </div>
             
             <div class="form-group" id="otpSection">
-                <label for="otp_code">Two-Factor Authentication Code (Optional)</label>
-                <input type="text" id="otp_code" name="otp_code" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="Enter if 2FA is enabled">
-                <div class="help-text">Enter the 6-digit code sent to your phone via SMS (leave blank if 2FA is not enabled)</div>
+                <label for="otp_code">Two-Factor Authentication Code (if enabled)</label>
+                <input type="text" id="otp_code" name="otp_code" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="000000">
+                <div class="help-text">
+                    <strong>For 2FA-enabled accounts:</strong> Ring will send a 6-digit SMS code to your phone. 
+                    If you don't have 2FA enabled, leave this blank on first attempt. 
+                    If Ring requires it, you'll be prompted to enter the code.
+                </div>
             </div>
             
             <button type="submit" class="btn-login" id="loginButton">
@@ -392,11 +397,13 @@
             }, 300000); // 5 minutes
         }
         
-        // Traditional form-based authentication
+        // Traditional form-based authentication using ring-doorbell library
+        // This is the WORKING authentication method that reliably connects to Ring's API
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             clearAlert();
             
+            // Collect form data
             const formData = {
                 username: document.getElementById('username').value,
                 password: document.getElementById('password').value,
@@ -406,6 +413,8 @@
             setLoading(true);
             
             try {
+                // Send authentication request to server
+                // Server uses ring-doorbell library to authenticate with Ring's OAuth API
                 const response = await fetch('/login', {
                     method: 'POST',
                     headers: {
@@ -416,29 +425,56 @@
                 
                 const data = await response.json();
                 
+                // Handle authentication response with detailed error feedback
                 if (response.ok) {
                     if (data.success) {
-                        showAlert('Authentication successful! Redirecting...', 'info');
+                        // SUCCESS: Ring authentication complete
+                        showAlert('✓ Authentication successful! Redirecting to dashboard...', 'info');
                         setTimeout(() => {
                             window.location.href = '/';
                         }, 1000);
                     } else if (data.requires_otp) {
+                        // 2FA REQUIRED: Ring account has SMS verification enabled
+                        // User needs to enter the 6-digit code sent to their phone
                         setLoading(false);
-                        showAlert('Two-factor authentication code required. Please enter the code sent to your phone in the OTP field above.', 'warning');
+                        showAlert('🔐 Two-Factor Authentication Required\n\nRing has sent a 6-digit verification code to your phone via SMS. Please enter it in the field above and submit again.', 'warning');
                         document.getElementById('otp_code').focus();
                         requiresOtp = true;
                     } else {
+                        // Other authentication failure
                         setLoading(false);
                         showAlert(data.message || 'Authentication failed. Please try again.', 'error');
                     }
                 } else {
+                    // HTTP error status - provide specific feedback based on error type
                     setLoading(false);
-                    showAlert(data.message || 'Authentication failed. Please check your credentials.', 'error');
+                    
+                    // Categorize error for better user feedback
+                    let alertType = 'error';
+                    let errorMessage = data.message || 'Authentication failed.';
+                    
+                    if (data.error_type === 'invalid_credentials') {
+                        // Wrong email or password
+                        errorMessage = '❌ Invalid Credentials\n\n' + errorMessage + '\n\nTip: Make sure you\'re using your Ring account email (not username).';
+                    } else if (data.error_type === 'invalid_otp') {
+                        // Wrong or expired OTP code
+                        errorMessage = '❌ Invalid Verification Code\n\n' + errorMessage;
+                        alertType = 'warning';
+                    } else if (data.error_type === 'network') {
+                        // Network connectivity issue
+                        errorMessage = '🌐 Network Error\n\n' + errorMessage;
+                    } else if (data.error_type === 'timeout') {
+                        // Request timeout
+                        errorMessage = '⏱️ Connection Timeout\n\n' + errorMessage;
+                    }
+                    
+                    showAlert(errorMessage, alertType);
                 }
             } catch (error) {
+                // JavaScript/fetch error (not HTTP error)
                 setLoading(false);
                 console.error('Login error:', error);
-                showAlert('Connection error. Please try again.', 'error');
+                showAlert('❌ Connection Error\n\nCould not connect to the server. Please check that:\n• The server is running\n• Your network connection is active\n• No firewall is blocking the connection', 'error');
             }
         });
     </script>
