@@ -5,14 +5,12 @@ Serves real-time heat map of detected Ring neighborhood posts
 import json
 import logging
 import secrets
-import asyncio
 import os
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from threading import Thread, Lock
 from ring_monitor import RingMonitor
-from ring_browser_auth import RingBrowserAuth
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,8 +25,6 @@ monitor = None
 monitor_thread = None
 auth_lock = Lock()
 pending_credentials = None
-browser_auth = None
-auth_state_file = 'ring_auth_state.json'
 
 
 def load_config():
@@ -81,7 +77,8 @@ def is_authenticated():
 def login():
     """Handle login page and Ring authentication via ring-doorbell library.
     
-    This endpoint implements the complete Ring authentication flow:
+    This endpoint implements the Ring authentication flow using the ring-doorbell
+    Python library for reliable API access.
     
     GET /login:
         - Displays the login form with fields for email, password, and OTP
@@ -101,24 +98,23 @@ def login():
        b) 2FA Required: Ring requires SMS verification code
        c) Failure: Invalid credentials or Ring API error
     
-    2FA Flow:
-    ---------
-    If 2FA is enabled on the Ring account:
-    1. Initial auth attempt (email+password only) fails with 2FA error
-    2. Server returns requires_otp=True response
-    3. Client prompts user to enter 6-digit SMS code
-    4. User submits email + password + OTP code
-    5. ring-doorbell re-authenticates with OTP included
-    6. Success: OAuth tokens obtained, user is authenticated
+    Authentication Failure Handling:
+    --------------------------------
+    If authentication fails, the response includes:
+    - error_type: Category of error (validation, 2fa_required, invalid_credentials, 
+      invalid_otp, network, timeout, server)
+    - message: Detailed error message explaining what went wrong and how to fix it
+    - success: false flag
+    - requires_otp: true if 2FA is needed (for 2fa_required error type)
     
-    Error Handling:
-    ---------------
-    The implementation provides specific feedback for different failure types:
-    - Missing credentials: 400 error with validation message
-    - 2FA required: 200 response with requires_otp flag and instructions
-    - Invalid credentials/OTP: 401 error with credential check message
-    - Ring API errors: 500 error with specific error details
-    - Network/server errors: 500 error with error message
+    Possible failure scenarios:
+    1. Missing credentials (400): Email or password not provided
+    2. 2FA required (200): SMS code needed but not yet provided
+    3. Invalid credentials (401): Wrong email or password
+    4. Invalid OTP (401): Wrong or expired 2FA code
+    5. Network error (500): Cannot reach Ring's servers
+    6. Timeout error (500): Request to Ring's servers timed out
+    7. Server error (500): Internal server or config error
     """
     if request.method == 'GET':
         # Serve the login page
@@ -137,10 +133,11 @@ def login():
         
         # Validate required fields
         if not username or not password:
+            logger.warning("Login attempt with missing credentials")
             return jsonify({
                 'success': False,
                 'error_type': 'validation',
-                'message': 'Ring email address and password are required'
+                'message': 'Ring email address and password are required. Please fill in both fields.'
             }), 400
         
         global monitor, monitor_thread, pending_credentials
@@ -156,10 +153,11 @@ def login():
         # Load monitoring configuration (keywords, poll interval, etc.)
         config = load_config()
         if not config:
+            logger.error("Failed to load configuration file")
             return jsonify({
                 'success': False,
                 'error_type': 'server',
-                'message': 'Server configuration error. Please contact administrator.'
+                'message': 'Server configuration error. The config.json file is missing or invalid. Please contact the administrator.'
             }), 500
         
         # Set Ring authentication credentials in config
@@ -175,6 +173,7 @@ def login():
         
         # Attempt authentication via ring-doorbell library
         # This calls Ring's OAuth API to exchange credentials for tokens
+        logger.info(f"Attempting authentication for user: {username}")
         auth_result = temp_monitor.authenticate()
         
         # Handle authentication result
@@ -187,7 +186,7 @@ def login():
                 'success': False,
                 'requires_otp': True,
                 'error_type': '2fa_required',
-                'message': 'Two-factor authentication is enabled on your Ring account. Please enter the 6-digit verification code sent to your phone via SMS.'
+                'message': 'Two-factor authentication is enabled on your Ring account. Ring has sent a 6-digit verification code to your phone via SMS. Please enter the code in the OTP field and submit again.'
             }), 200
             
         elif auth_result == True:
@@ -216,7 +215,7 @@ def login():
                 monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
                 monitor_thread.start()
             
-            logger.info(f"User {username} authenticated successfully with Ring")
+            logger.info(f"✓ User {username} authenticated successfully with Ring via ring-doorbell library")
             return jsonify({
                 'success': True,
                 'message': 'Successfully authenticated with Ring. Redirecting to dashboard...'
@@ -232,14 +231,23 @@ def login():
             if otp_code:
                 # User provided OTP but auth still failed
                 # Most likely: wrong OTP, expired OTP, or credential issue
-                error_message += 'Please check your email, password, and verification code. The SMS code may have expired - request a new one by logging in again.'
+                error_message += 'Please verify:\n'
+                error_message += '• Your Ring email address is correct\n'
+                error_message += '• Your Ring password is correct\n'
+                error_message += '• The 6-digit SMS verification code is correct and not expired\n'
+                error_message += '• The code is from the most recent SMS (not an old one)\n\n'
+                error_message += 'If the code expired, request a new one by attempting login again without the OTP field filled.'
                 error_type = 'invalid_otp'
-                logger.warning(f"Authentication failed for {username} with OTP code")
+                logger.warning(f"❌ Authentication failed for {username} with OTP code - likely invalid or expired OTP")
             else:
                 # No OTP provided, likely credential error
-                error_message += 'Please verify your Ring email address and password are correct.'
+                error_message += 'Please verify:\n'
+                error_message += '• You are using your Ring account EMAIL address (not a username)\n'
+                error_message += '• Your password is correct (passwords are case-sensitive)\n'
+                error_message += '• Your Ring account is active and not suspended\n\n'
+                error_message += 'You can verify your credentials by logging in at https://account.ring.com'
                 error_type = 'invalid_credentials'
-                logger.warning(f"Authentication failed for {username}: invalid credentials")
+                logger.warning(f"❌ Authentication failed for {username} - likely invalid email or password")
             
             return jsonify({
                 'success': False,
@@ -248,20 +256,35 @@ def login():
             }), 401
             
     except Exception as e:
-        # Catch unexpected errors (network issues, Ring API changes, etc.)
+        # Catch unexpected errors (network issues, Ring API changes, library bugs, etc.)
         error_str = str(e)
-        logger.error(f"Login error for {username if 'username' in locals() else 'unknown'}: {error_str}")
+        username_for_log = username if 'username' in locals() else 'unknown'
+        logger.error(f"❌ Unexpected login error for {username_for_log}: {error_str}")
         
         # Try to provide helpful error message based on exception
         error_type = 'server'
+        error_message = 'An unexpected error occurred during authentication.\n\n'
+        
         if 'network' in error_str.lower() or 'connection' in error_str.lower():
-            error_message = 'Network error connecting to Ring. Please check your internet connection and try again.'
+            error_message += 'Network Error:\n'
+            error_message += '• Cannot connect to Ring\'s servers\n'
+            error_message += '• Check your internet connection\n'
+            error_message += '• Verify firewall is not blocking outbound HTTPS (port 443)\n'
+            error_message += '• Ring API domains must be accessible: api.ring.com, oauth.ring.com'
             error_type = 'network'
         elif 'timeout' in error_str.lower():
-            error_message = 'Connection to Ring timed out. Please try again.'
+            error_message += 'Connection Timeout:\n'
+            error_message += '• Ring\'s servers are taking too long to respond\n'
+            error_message += '• Try again in a few moments\n'
+            error_message += '• Check your network connection speed and stability'
             error_type = 'timeout'
         else:
-            error_message = f'An error occurred during authentication: {error_str}'
+            error_message += f'Error details: {error_str}\n\n'
+            error_message += 'Troubleshooting steps:\n'
+            error_message += '• Try again in a few moments\n'
+            error_message += '• Check server logs for more details\n'
+            error_message += '• Verify ring-doorbell library is installed: pip install ring-doorbell==0.8.8\n'
+            error_message += '• Report issue if problem persists at: https://github.com/nabealcorrigan-art/little-finger/issues'
         
         return jsonify({
             'success': False,
@@ -283,207 +306,6 @@ def logout():
     
     logger.info(f"User {username} logged out")
     return redirect(url_for('login'))
-
-
-@app.route('/auth/browser/start', methods=['POST'])
-def start_browser_auth():
-    """Start browser-based authentication with Ring"""
-    global browser_auth
-    
-    try:
-        # Check if already authenticated
-        if is_authenticated():
-            return jsonify({
-                'success': False,
-                'message': 'Already authenticated'
-            }), 400
-        
-        # Check if browser auth is already in progress
-        if browser_auth is not None:
-            return jsonify({
-                'success': False,
-                'message': 'Browser authentication already in progress'
-            }), 400
-        
-        # Initialize browser_auth before starting thread so status endpoint can see it
-        browser_auth = RingBrowserAuth(headless=False)
-        
-        # Run async auth in a separate thread
-        def run_auth():
-            global browser_auth
-            
-            async def do_auth():
-                global browser_auth, monitor, monitor_thread
-                
-                try:
-                    await browser_auth.start_browser()
-                    await browser_auth.navigate_to_login()
-                    
-                    # Wait for authentication (5 minutes timeout)
-                    auth_data = await browser_auth.wait_for_authentication(timeout_seconds=300)
-                    
-                    # Save the auth state
-                    await browser_auth.save_auth_state(auth_state_file)
-                    
-                    logger.info("Browser authentication successful")
-                    
-                    # Initialize monitor with the captured session
-                    await initialize_monitor_from_browser_auth(auth_data)
-                    
-                    # Mark as authenticated (using Flask's session requires app context)
-                    with app.app_context():
-                        from flask import session as flask_session
-                        # Note: Session modifications in thread won't persist
-                        # The client-side polling will detect successful auth via monitor state
-                    
-                except Exception as e:
-                    logger.error(f"Browser authentication failed: {e}")
-                finally:
-                    await browser_auth.close()
-                    browser_auth = None
-            
-            # Run the async function
-            asyncio.run(do_auth())
-        
-        # Start auth in background thread
-        auth_thread = Thread(target=run_auth, daemon=True)
-        auth_thread.start()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Browser authentication started. Please complete login in the browser window.'
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Error starting browser auth: {e}")
-        browser_auth = None  # Reset on error
-        return jsonify({
-            'success': False,
-            'message': str(e)
-        }), 500
-
-
-@app.route('/auth/browser/status', methods=['GET'])
-def check_browser_auth_status():
-    """Check status of browser authentication"""
-    # Check if monitor is authenticated (indicates successful browser auth)
-    if monitor and monitor.is_authenticated:
-        # Mark session as authenticated
-        session['authenticated'] = True
-        session['auth_method'] = 'browser'
-        return jsonify({
-            'authenticated': True,
-            'method': 'browser'
-        }), 200
-    
-    # Fall back to session check
-    if is_authenticated():
-        return jsonify({
-            'authenticated': True,
-            'method': session.get('auth_method', 'unknown')
-        }), 200
-    
-    return jsonify({
-        'authenticated': False,
-        'browser_active': browser_auth is not None
-    }), 200
-
-
-async def initialize_monitor_from_browser_auth(auth_data):
-    """Initialize Ring monitor using browser-captured authentication
-    
-    ⚠️ KNOWN ISSUE: This function is part of an experimental feature that does not
-    currently work with Ring's API. Ring does not expose OAuth tokens in a way that
-    can be captured from browser storage or easily intercepted.
-    
-    This function will typically fail with "Could not extract authentication tokens"
-    because the required refresh_token is not available.
-    """
-    global monitor, monitor_thread
-    
-    logger.warning("=" * 70)
-    logger.warning("⚠️ EXPERIMENTAL: Attempting to initialize monitor from browser auth")
-    logger.warning("⚠️ THIS IS KNOWN TO NOT WORK - Ring API tokens cannot be extracted")
-    logger.warning("=" * 70)
-    
-    config = load_config()
-    if not config:
-        raise RuntimeError("Failed to load configuration")
-    
-    # Try to extract refresh token from auth data
-    refresh_token = None
-    
-    logger.info("Checking for refresh token in intercepted API calls...")
-    if auth_data.get('intercepted_tokens'):
-        logger.info(f"Found {len(auth_data['intercepted_tokens'])} intercepted token responses")
-        for i, token_data in enumerate(auth_data['intercepted_tokens']):
-            if isinstance(token_data, dict) and 'refresh_token' in token_data:
-                refresh_token = token_data['refresh_token']
-                logger.info(f"✓ Found refresh token in intercepted API call #{i}")
-                break
-        if not refresh_token:
-            logger.warning("❌ No refresh_token found in any intercepted API calls")
-    else:
-        logger.warning("❌ No intercepted_tokens in auth data")
-    
-    if not refresh_token:
-        logger.info("Checking for refresh token in browser storage...")
-        if auth_data.get('tokens'):
-            logger.info(f"Found {len(auth_data['tokens'])} token-related storage keys")
-            for key, value in auth_data['tokens'].items():
-                logger.info(f"  - Checking key: {key}")
-                if isinstance(value, dict) and 'refresh_token' in value:
-                    refresh_token = value['refresh_token']
-                    logger.info(f"✓ Found refresh token in browser storage key: {key}")
-                    break
-            if not refresh_token:
-                logger.warning("❌ No refresh_token found in any browser storage keys")
-        else:
-            logger.warning("❌ No tokens dictionary in auth data")
-    
-    if refresh_token:
-        logger.info("=" * 70)
-        logger.info("✓ UNEXPECTED SUCCESS: Found a refresh token!")
-        logger.info("  Attempting to initialize Ring monitor...")
-        logger.info("=" * 70)
-        
-        # Use the captured refresh token
-        config['ring']['refresh_token'] = refresh_token
-        config['ring']['username'] = ''
-        config['ring']['password'] = ''
-        config['ring']['otp_code'] = ''
-        
-        # Initialize monitor with refresh token
-        with auth_lock:
-            monitor = RingMonitor(config)
-            auth_result = monitor.authenticate()
-            
-            if auth_result:
-                logger.info("✓✓✓ SUCCESS! Monitor initialized with browser-captured tokens!")
-                logger.info("✓✓✓ Browser authentication is now working!")
-                
-                # Start monitoring if not already running
-                if not monitor_thread or not monitor_thread.is_alive():
-                    monitor_thread = Thread(target=start_monitoring_thread, daemon=True)
-                    monitor_thread.start()
-            else:
-                logger.error("❌ Failed to authenticate monitor with captured tokens")
-                raise RuntimeError("Failed to authenticate monitor with captured tokens")
-    else:
-        logger.error("=" * 70)
-        logger.error("❌ EXPECTED FAILURE: No refresh token found in browser auth data")
-        logger.error("❌ This is the known limitation of the browser auth feature")
-        logger.error("=" * 70)
-        logger.error("Ring does not expose OAuth tokens in browser storage or easily")
-        logger.error("interceptable API calls. To authenticate with Ring:")
-        logger.error("")
-        logger.error("1. Use the FORM-BASED LOGIN on the login page")
-        logger.error("2. Enter your Ring email and password directly")
-        logger.error("3. Include 2FA code if required")
-        logger.error("")
-        logger.error("Browser authentication is experimental and NOT FUNCTIONAL.")
-        logger.error("=" * 70)
-        raise RuntimeError("Could not extract authentication tokens from browser session. Use form-based login instead.")
 
 
 @app.route('/')

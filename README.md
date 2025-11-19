@@ -70,11 +70,9 @@ pip install -r requirements.txt
 
 This application uses the **`ring-doorbell` Python library** to authenticate with Ring's API. This is the standard, reliable method used by the Ring developer community.
 
-> **⚠️ BROWSER LOGIN STATUS**: The browser-based authentication feature is experimental and **does not currently work** because it cannot extract the OAuth tokens required by the ring-doorbell library. See [BROWSER_AUTH_STATUS.md](BROWSER_AUTH_STATUS.md) for technical details. **Please use form-based login** which reliably authenticates through ring-doorbell.
+#### 📝 Login via ring-doorbell Library
 
-#### 📝 Form-Based Login via ring-doorbell (Recommended - Reliable Method)
-
-The form-based login uses the proven **ring-doorbell Python library** to authenticate directly with Ring's OAuth API. This is the standard authentication method and works reliably.
+The login form uses the proven **ring-doorbell Python library** to authenticate directly with Ring's OAuth API. This is the standard authentication method and works reliably.
 
 **How it works:**
 
@@ -131,31 +129,6 @@ If your Ring account has two-factor authentication enabled (SMS verification), t
 - If the code expires, simply request a new login to get a fresh SMS
 - OTP codes are single-use - each login attempt needs a fresh code if it fails
 - Keep your phone nearby during first login if 2FA is enabled
-
-#### 🌐 Browser-Based Login (Experimental - Not Functional)
-
-**⚠️ STATUS: This feature is EXPERIMENTAL and does NOT currently work for Ring API authentication.**
-
-The browser automation approach cannot extract the OAuth tokens that the ring-doorbell library requires. While it successfully opens Ring's website and allows you to login, the authentication tokens are not accessible through browser storage or interception.
-
-**Why it doesn't work:**
-
-- Ring's OAuth tokens are not stored in browser localStorage or sessionStorage
-- The Ring website uses an authentication flow incompatible with token extraction
-- API request interception has not successfully captured the refresh tokens
-- The ring-doorbell library requires specific OAuth tokens that browser auth cannot provide
-
-**Current status:**
-
-- ❌ Cannot extract OAuth refresh tokens needed by ring-doorbell
-- ❌ Cannot initialize authenticated Ring API session
-- ❌ Cannot enable neighborhood post monitoring
-- ✅ Successfully opens browser and navigates to Ring login
-- ✅ Allows user to complete login on Ring's website
-
-**For developers**: If you want to help fix this, the implementation in `ring_browser_auth.py` needs work to intercept Ring's OAuth token API calls or extract tokens from the authenticated browser session. Contributions welcome!
-
-**For users**: Please use the **form-based login method** which reliably authenticates through the ring-doorbell library.
 
 ## Usage
 
@@ -221,10 +194,8 @@ The server will start on `http://0.0.0.0:5777` by default.
 ## API Endpoints
 
 ### Authentication
-- `GET /login`: Login page with form-based authentication (browser auth is experimental)
-- `POST /login`: Form-based authentication endpoint (accepts JSON with username, password, otp_code)
-- `POST /auth/browser/start`: ⚠️ EXPERIMENTAL - Start browser-based authentication (does not currently work for Ring API)
-- `GET /auth/browser/status`: ⚠️ EXPERIMENTAL - Check browser authentication status (not functional)
+- `GET /login`: Login page with ring-doorbell authentication form
+- `POST /login`: Authentication endpoint (accepts JSON with username, password, otp_code)
 - `GET /logout`: Logout and clear session
 
 ### Application
@@ -238,9 +209,8 @@ The server will start on `http://0.0.0.0:5777` by default.
 ## Dashboard Features
 
 ### Authentication
-- **Form-Based Login (Recommended)**: Enter Ring credentials to authenticate with Ring's API - WORKS RELIABLY
-- **Browser-Based Login (Experimental)**: ⚠️ Opens Ring's website but cannot extract API tokens - NOT FUNCTIONAL
-- **2FA Support**: Full support for Ring's two-factor authentication via SMS OTP codes in form-based login
+- **Login via ring-doorbell**: Enter Ring credentials to authenticate with Ring's API
+- **2FA Support**: Full support for Ring's two-factor authentication via SMS OTP codes
 - **Session Management**: Stay logged in across browser sessions
 - **Logout**: Clear session and return to login page
 
@@ -487,22 +457,6 @@ This section covers common authentication problems and their solutions when usin
      - Check for ring-doorbell library updates
      - Report issues on GitHub
      - See if others have similar problems in ring-doorbell issues
-
-#### Browser Login Issues (Experimental Feature)
-
-**Important**: Browser-based login is **experimental and not functional**. It cannot extract OAuth tokens needed by ring-doorbell.
-
-**If you're trying to use browser login:**
-- ❌ It will NOT work for authenticating with Ring's API
-- ❌ Cannot extract tokens even if browser login succeeds
-- ✅ Use form-based login instead - it's reliable
-
-**Why browser login doesn't work:**
-- Ring's OAuth tokens aren't in browser storage
-- Token interception hasn't been successfully implemented
-- The ring-doorbell library requires API-level tokens
-
-**Solution**: Always use the form-based login with ring-doorbell library.
 
 #### Getting Help
 
