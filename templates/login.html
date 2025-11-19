@@ -105,57 +105,6 @@
             cursor: not-allowed;
         }
         
-        .divider {
-            text-align: center;
-            margin: 25px 0;
-            position: relative;
-        }
-        
-        .divider::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: #444;
-        }
-        
-        .divider span {
-            position: relative;
-            background: #2a2a2a;
-            padding: 0 15px;
-            color: #888;
-            font-size: 14px;
-        }
-        
-        .btn-browser-auth {
-            width: 100%;
-            padding: 14px;
-            background: #333;
-            border: 2px solid #667eea;
-            border-radius: 6px;
-            color: #fff;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-        
-        .btn-browser-auth:hover {
-            background: #444;
-            border-color: #764ba2;
-        }
-        
-        .btn-browser-auth:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
         .info-box {
             background: #1a1a1a;
             border-left: 4px solid #667eea;
@@ -232,31 +181,10 @@
         
         <div id="alertContainer"></div>
         
-        <!-- Warning about browser auth not working -->
-        <div class="alert alert-warning" style="margin-bottom: 20px;">
-            <strong>⚠️ Authentication Notice:</strong> This application uses the <strong>ring-doorbell Python library</strong> for reliable Ring API authentication. The form-based login below works consistently. The browser login is experimental and currently non-functional - it cannot extract the OAuth tokens needed by ring-doorbell.
-        </div>
-        
-        <!-- Browser-based login (EXPERIMENTAL - NOT WORKING) -->
-        <div class="info-box" id="browserAuthBox" style="opacity: 0.6;">
-            <p><strong>🌐 Browser Login (EXPERIMENTAL - NOT FUNCTIONAL)</strong></p>
-            <p><strong>Why it doesn't work:</strong> Ring's OAuth tokens are not accessible via browser automation. The ring-doorbell library requires API-level authentication.</p>
-            <p><strong>Recommended:</strong> Use the form-based login below which authenticates through ring-doorbell's proven API integration.</p>
-        </div>
-        
-        <button type="button" class="btn-browser-auth" id="browserAuthButton" disabled style="opacity: 0.5; cursor: not-allowed;">
-            <span>🔐</span>
-            <span id="browserButtonText">Browser Login (Experimental - Use ring-doorbell Form Below)</span>
-        </button>
-        
-        <div class="divider">
-            <span>RELIABLE METHOD: ring-doorbell Library</span>
-        </div>
-        
-        <!-- Traditional form-based login (THIS WORKS - uses ring-doorbell library!) -->
+        <!-- Authentication info -->
         <div class="info-box" style="border-left-color: #4CAF50; background: #1a2a1a;">
-            <p><strong>✅ Recommended: Form-Based Login via ring-doorbell</strong></p>
-            <p>Enter your Ring credentials below. This uses the proven <strong>ring-doorbell Python library</strong> to authenticate directly with Ring's OAuth API.</p>
+            <p><strong>✅ Ring Authentication via ring-doorbell Library</strong></p>
+            <p>Enter your Ring credentials below. This uses the <strong>ring-doorbell Python library</strong> to authenticate directly with Ring's OAuth API.</p>
         </div>
         <form id="loginForm">
             <div class="form-group">
@@ -297,12 +225,8 @@
         const loginButton = document.getElementById('loginButton');
         const buttonText = document.getElementById('buttonText');
         const loadingIndicator = document.getElementById('loadingIndicator');
-        const browserAuthButton = document.getElementById('browserAuthButton');
-        const browserButtonText = document.getElementById('browserButtonText');
-        const browserAuthBox = document.getElementById('browserAuthBox');
         
         let requiresOtp = false;
-        let browserAuthActive = false;
         
         function showAlert(message, type = 'error') {
             alertContainer.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
@@ -315,90 +239,15 @@
         function setLoading(loading) {
             if (loading) {
                 form.style.display = 'none';
-                browserAuthButton.style.display = 'none';
                 loadingIndicator.classList.add('show');
             } else {
                 form.style.display = 'block';
-                browserAuthButton.style.display = 'flex';
                 loadingIndicator.classList.remove('show');
             }
         }
         
-        // Browser-based authentication
-        browserAuthButton.addEventListener('click', async () => {
-            clearAlert();
-            browserAuthButton.disabled = true;
-            browserButtonText.textContent = 'Starting browser...';
-            
-            try {
-                const response = await fetch('/auth/browser/start', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok && data.success) {
-                    showAlert('Browser window opened. Please complete login on Ring\'s website.', 'info');
-                    browserButtonText.textContent = 'Waiting for login...';
-                    browserAuthActive = true;
-                    
-                    // Hide the form while browser auth is active
-                    form.style.display = 'none';
-                    document.querySelector('.divider').style.display = 'none';
-                    
-                    // Poll for authentication status
-                    pollAuthStatus();
-                } else {
-                    browserAuthButton.disabled = false;
-                    browserButtonText.textContent = 'Login via Ring Website';
-                    showAlert(data.message || 'Failed to start browser authentication', 'error');
-                }
-            } catch (error) {
-                console.error('Browser auth error:', error);
-                browserAuthButton.disabled = false;
-                browserButtonText.textContent = 'Login via Ring Website';
-                showAlert('Connection error. Please try again.', 'error');
-            }
-        });
-        
-        // Poll authentication status
-        function pollAuthStatus() {
-            const pollInterval = setInterval(async () => {
-                try {
-                    const response = await fetch('/auth/browser/status');
-                    const data = await response.json();
-                    
-                    if (data.authenticated) {
-                        clearInterval(pollInterval);
-                        showAlert('Authentication successful! Redirecting...', 'info');
-                        setTimeout(() => {
-                            window.location.href = '/';
-                        }, 1500);
-                    }
-                } catch (error) {
-                    console.error('Status check error:', error);
-                }
-            }, 2000); // Check every 2 seconds
-            
-            // Stop polling after 5 minutes
-            setTimeout(() => {
-                clearInterval(pollInterval);
-                if (browserAuthActive && !document.querySelector('.alert-info')) {
-                    browserAuthButton.disabled = false;
-                    browserButtonText.textContent = 'Login via Ring Website';
-                    form.style.display = 'block';
-                    document.querySelector('.divider').style.display = 'block';
-                    showAlert('Authentication timeout. Please try again.', 'warning');
-                    browserAuthActive = false;
-                }
-            }, 300000); // 5 minutes
-        }
-        
-        // Traditional form-based authentication using ring-doorbell library
-        // This is the WORKING authentication method that reliably connects to Ring's API
+        // Form-based authentication using ring-doorbell library
+        // This is the authentication method that reliably connects to Ring's API
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             clearAlert();
